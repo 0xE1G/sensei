@@ -56,6 +56,14 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
     goals = [g for g in task["goal"] if g["pred"] in ("inside", "on")]
     # Far objects first, so the arm does not sweep over things it already placed.
     goals.sort(key=lambda g: -math.hypot(*percepts[g["obj"]]["center"]) if percepts.get(g["obj"]) else 0)
+    # A target that is itself an item to be moved (a stack base) must be placed before what goes on it.
+    items, ordered = {g["obj"] for g in goals}, []
+    while goals:
+        ready = [g for g in goals if g["target"] not in items or g["target"] in {o["obj"] for o in ordered}]
+        nxt = ready[0] if ready else goals[0]
+        ordered.append(nxt)
+        goals.remove(nxt)
+    goals = ordered
     slots = _container_slots(goals, percepts)
     for g in goals:
         desc = percepts.get(g["obj"])

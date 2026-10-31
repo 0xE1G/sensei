@@ -158,7 +158,7 @@ class Investigator:
             lo, hi = RANGES[o["template"]][test["param"]]
             clipped = not lo - 1e-9 <= want <= hi + 1e-9
             o["params"][test["param"]] = want
-        return self._cfg(tag, spec, overrides=overrides, positions=positions), clipped
+        return self._cfg(tag, spec, overrides=overrides, positions=positions, perturb=case.get("perturb")), clipped
 
     def run(self, cases: list[dict]) -> dict:
         try:
@@ -168,7 +168,8 @@ class Investigator:
 
     def _run(self, cases):
         # 1. reproduce
-        jobs = [(self._cfg(f"case{i}_base", c["task_spec"]), c["seed"]) for i, c in enumerate(cases)]
+        jobs = [(self._cfg(f"case{i}_base", c["task_spec"], perturb=c.get("perturb")), c["seed"])
+                for i, c in enumerate(cases)]
         list(self.pool.map(jobs))
         items = []
         for i, c in enumerate(cases):

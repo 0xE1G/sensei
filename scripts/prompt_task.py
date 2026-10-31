@@ -35,6 +35,8 @@ def main():
     ap.add_argument("--verify", action="store_true",
                     help="with --program: verify a newly written program on fresh scenes; promote it to a composite card")
     ap.add_argument("--fresh", action="store_true", help="with --program: ignore verified composites, ask the model")
+    ap.add_argument("--recovery", type=int, default=2,
+                    help="retries per item after an observed failure (re-perceive, next verified grasp); 0 = off")
     a = ap.parse_args()
     client = ModelClient(a.backend, a.model, use_cache=not a.no_cache)
     try:
@@ -82,7 +84,7 @@ def main():
                                                                             "program_source": source})]
     for label, spec in runs:
         s = run_batch(spec["name"], n=a.n, workers=a.workers, task_spec=spec, oracle=True, save_video=False,
-                      save_poses=False, success_sample=0, save_failures=False, progress=False)
+                      save_poses=False, success_sample=0, save_failures=False, progress=False, recovery=a.recovery)
         print(label + ":", json.dumps({k: s[k] for k in ("run_id", "success", "trials", "success_ci95",
                                                          "failure_labels", "oracle")}))
     return 0

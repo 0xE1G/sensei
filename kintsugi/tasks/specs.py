@@ -224,7 +224,13 @@ TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bo
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:
-    if name not in TASKS:
-        raise ValueError(f"Unknown task '{name}'. Known: {sorted(TASKS)}")
-    task = TASKS[name](seed=seed, **kw)
+    """name "spec" = a task spec given as task_spec=... (e.g. written from a typed request); the seed then only
+    varies the placement."""
+    if name == "spec":
+        task = dict(kw["task_spec"])
+        task.pop("program", None)
+    elif name not in TASKS:
+        raise ValueError(f"Unknown task '{name}'. Known: {sorted(TASKS)} or 'spec'")
+    else:
+        task = TASKS[name](seed=seed, **kw)
     return isolate(task, isolate_obj) if isolate_obj else task

@@ -28,6 +28,7 @@ def main():
     ap.add_argument("--seed0", type=int, default=0, help="first seed (with --split: index within the split)")
     ap.add_argument("--split", choices=["train", "dev", "test"], default=None,
                     help="draw objects from a frozen split (experiments/splits.json)")
+    ap.add_argument("--recovery", type=int, default=0, help="retries per item after a failed step (0 = off)")
     ap.add_argument("--oracle", action="store_true",
                     help="also run the solvability oracle per scene; failures count only where it succeeds")
     ap.add_argument("--reference", action="store_true",
@@ -51,7 +52,7 @@ def main():
     s = run_batch(a.task, n=a.n, seed0=a.seed0, workers=a.workers, perception=a.perception,
                   allowed_grasps=a.grasps, overrides=overrides or None, save_failures=not a.no_failures,
                   success_sample=a.success_sample, save_video=not a.no_video, save_poses=not a.no_poses,
-                  seeds=seeds, extra_cards=extra, oracle=a.oracle)
+                  seeds=seeds, extra_cards=extra, oracle=a.oracle, recovery=a.recovery)
     print(json.dumps(s, indent=1))
 
 

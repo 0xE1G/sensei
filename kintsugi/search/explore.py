@@ -100,7 +100,8 @@ class Explorer:
                  tune_trials: int = 32, tune_seeds: int = 6, n_dev: int = 16, n_regression: int = 8,
                  min_feasible: float = 0.75, run_id: str | None = None, seed: int = 0, force: bool = False,
                  library: dict | None = None, performance: dict | None = None, task_kwargs: dict | None = None,
-                 patches: dict | None = None, hints: list | None = None, patch_trials: int = 20):
+                 patches: dict | None = None, hints: list | None = None, patch_trials: int = 20,
+                 perturb: dict | None = None):
         """`library`: the card set every trial uses (default: the active library, snapshotted now).
         `performance`: routing evidence (default: skill_library/performance.json; {} for the seed library).
         `task_kwargs`: e.g. {"region": ...} to repair a failure-search cluster with region-sampled probe scenes."""
@@ -108,6 +109,7 @@ class Explorer:
         self.perf = load_performance() if performance is None else performance
         self.patches = load_patches() if patches is None else patches
         self.hints = hints or []            # confirmed one-change tests from the investigator
+        self.perturb = perturb              # physics conditions to repair under (e.g. where the failures happened)
         self.patch_trials = patch_trials
         self.task = task
         self.n_before, self.n_candidates, self.per_family = n_before, n_candidates, per_family
@@ -143,6 +145,8 @@ class Explorer:
         tk = {**self.task_kwargs, **(task_kwargs or {})} if task is None else (task_kwargs or {})
         kw.setdefault("performance", self.perf)
         kw.setdefault("patches", self.patches)
+        if kw.get("perturb") is None:
+            kw["perturb"] = self.perturb
         return trial_cfg(task or self.task, self.out, save_failures=False, success_sample=0, save_video=False,
                          save_poses=False, tag=tag, library=self.cards, task_kwargs=tk, **kw)
 
@@ -518,8 +522,9 @@ class Explorer:
             label = t + (f"[{kw['region']['template']}]" if "region" in kw else "")
             seeds = list(range(self.n_regression))
             base = self._baseline(t, seeds, kw)
+            # Regression always at nominal physics (perturb={}), whatever conditions the repair targets.
             after = _rate(self._run([(self._cfg(f"{tag}_reg_{label}", task=t, task_kwargs=kw, extra_cards=extra,
-                                                performance=perf, patches=pat), s) for s in seeds]))
+                                                performance=perf, patches=pat, perturb={}), s) for s in seeds]))
             ok = after["goal_rate"] >= base["goal_rate"] - 0.1 and after["goal_ci95"][1] >= base["goal_ci95"][0]
             b["tasks"][label] = {"before": base, "after": after, "pass": ok}
             b["pass"] &= ok
@@ -544,7 +549,8 @@ class Explorer:
         path = BASELINE_DIR / f"{key}.json"
         if path.exists():
             return json.loads(path.read_text())
-        r = _rate(self._run([(self._cfg(f"baseline_{task}", task=task, task_kwargs=kwargs), s) for s in seeds]))
+        r = _rate(self._run([(self._cfg(f"baseline_{task}", task=task, task_kwargs=kwargs, perturb={}), s)
+                             for s in seeds]))
         BASELINE_DIR.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(r, indent=1))
         return r

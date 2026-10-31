@@ -286,6 +286,28 @@ round started by the search (see status).
    Claude spec + program (pick, next grasp, else push; plan prompt v4 rule) -> 8/8 vs fixed plan 0/8.
    Caveat: the oracle has no push skill, so it labels these scenes unsolvable.
 
+4h. **Recovery, fixed-plan ordering, auto-repair (2026-10-31)**:
+   - Fixed plan: goals whose target is another item (stack base) go first; movable targets (block/bar/cylinder) are
+     re-perceived at placing time (`Episode.target_desc`). stack_by_size with the fixed plan 0/32 -> 24/24.
+   - Recovery inside a run (`Episode(recovery=N)`, `run_task.py --recovery N`, `prompt_task.py` default 2,
+     experiments 0 so searches/gates measure raw skills): after a failed step, if `should_retry` (observable only:
+     retryable label, perception does NOT see it on the target, still perceived, not tipped: height ratio >= 0.7)
+     re-perceive and retry with the next verified grasp (`retry_grasp`), same in program pick/place. First version
+     decided from the simulator's goal check and retried tipped objects: no gain (148 -> 147/160 hard). Fixed:
+     nominal 242/244 either way (nothing to recover); hard physics (friction x0.35-0.7, mass x1.3-2) probe 148 ->
+     150/160 (p = 0.25, not significant), faster on average. Remaining failures are mostly tipped objects (no
+     righting skill). `scripts/measure_recovery.py [--hard] [--tasks ...]`.
+   - Run-time grasp-pose ranking NOT built: remaining failures are physics (tipping, slips), only 2/12 collisions.
+   - Auto-repair orchestrator (`kintsugi/auto_repair.py`, `scripts/auto_repair.py <run dirs> [--tag] [--min-failures]`):
+     failed steps from ordinary runs -> clusters (source, kind, skill, physics) -> exact oracle replays under the
+     recorded physics (records now carry `perturb`) -> investigator -> explorer (probe failures: region around the
+     failing objects; named task; typed-request spec via task "spec" in make_task) with the confirmed fixes as hints
+     and the same physics. Regression checks and baselines always at nominal physics (perturb={}).
+     Result on the hard probe runs: 12 failures, all oracle-solvable; mug/rim_pinch (6) repaired: investigator 9
+     confirmed fixes -> patch rim_pinch.depth 0.0129 -> 0.035 for hollow-wide-tall (source investigator); gate
+     cluster 8/10, held-out 46/48 vs 41/48 (p = 0.03); at nominal physics mugs 45 -> 47/48, cups and bowls 24/24
+     unchanged (runs/20261031-050348_auto_repair). run_batch now accepts patches.
+
 **Remaining, in order** (plan build order 8c onwards):
 6. done: Model-written primitives (8c), see 4g.
 7. old text kept for reference: **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->

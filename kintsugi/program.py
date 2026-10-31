@@ -89,7 +89,7 @@ def run_program(ep, code: str) -> dict:
     from .skills.router import patch_for, shape_group
     from .tasks.planner import choose_grasp, fits, grasp_preference
 
-    log, state = [], {"held": None, "skill_calls": 0, "placed": {}}
+    log, state = [], {"held": None, "skill_calls": 0, "placed": {}, "replace": {}}
     specs = {o["id"]: o for o in ep.task["objects"]}
     allowed = ep.allowed_grasps or grasp_preference(ep.cards)
     from .tasks.planner import _container_slots
@@ -133,26 +133,37 @@ def run_program(ep, code: str) -> dict:
         if state["held"] is not None:
             raise ProgramError("pick called while already holding something; place it first")
         oid = _id(obj)
-        srec = ep.begin(oid)
-        desc = srec["_desc"]
-        if desc is None:
+        if grasp is not None and (grasp not in ep.cards or ep.cards[grasp].get("kind") != "grasp"):
+            raise ProgramError(f"unknown grasp {grasp!r}; library grasps: {grasp_preference(ep.cards)}")
+        tried = []
+        # With recovery on (and no grasp forced by the program), a failed pick is retried on a fresh percept with
+        # the next verified grasp.
+        for attempt in range(1 + (ep.recovery if grasp is None else 0)):
+            srec = ep.begin(oid)
+            srec["attempt"] = attempt
+            desc = srec["_desc"]
+            if desc is None:
+                ep.finish(srec, ep.goal_for(oid))
+                log.append({"call": "pick", "obj": oid, "ok": False, "label": "object_not_perceived"})
+                return False
+            if grasp is not None:
+                g, why = grasp, {"reason": "chosen by the program"}
+            elif attempt == 0:
+                g, why = choose_grasp(desc, allowed, ep.cards, ep.performance)
+            else:
+                g = ep.retry_grasp(desc, tried)
+                why = {"reason": f"recovery attempt {attempt}", "card": g}
+            srec["routing"] = why
+            tried.append(g)
+            ok = ep.grasp(srec, g, _params(g, desc)) and ep.lift(srec, _params("lift", desc))
+            log.append({"call": "pick", "obj": oid, "grasp": g, "ok": ok, "label": srec["label"], "attempt": attempt})
+            if ok:
+                state["held"] = srec
+                return True
             ep.finish(srec, ep.goal_for(oid))
-            log.append({"call": "pick", "obj": oid, "ok": False, "label": "object_not_perceived"})
-            return False
-        if grasp is None:
-            grasp, why = choose_grasp(desc, allowed, ep.cards, ep.performance)
-        else:
-            if grasp not in ep.cards or ep.cards[grasp].get("kind") != "grasp":
-                raise ProgramError(f"unknown grasp {grasp!r}; library grasps: {grasp_preference(ep.cards)}")
-            why = {"reason": "chosen by the program"}
-        srec["routing"] = why
-        ok = ep.grasp(srec, grasp, _params(grasp, desc)) and ep.lift(srec, _params("lift", desc))
-        log.append({"call": "pick", "obj": oid, "grasp": grasp, "ok": ok, "label": srec["label"]})
-        if not ok:
-            ep.finish(srec, ep.goal_for(oid))
-            return False
-        state["held"] = srec
-        return True
+            if not ep.should_retry(srec):
+                return False
+        return False
 
     def _place(tdesc, target_id, mode):
         _budget()
@@ -183,7 +194,18 @@ def run_program(ep, code: str) -> dict:
         tdesc = ep.perc.perceive([tid])[tid]
         if tdesc is None:
             raise ProgramError(f"target {tid} is not perceived")
-        return _place(tdesc, tid, "drop" if specs[tid]["template"] == "bin" else "place")
+        oid = state["held"]["obj"] if state["held"] else None
+        ok = _place(tdesc, tid, "drop" if specs[tid]["template"] == "bin" else "place")
+        # Recovery: dropped on the way or landed off the target -> pick it up again and place it again (bounded).
+        last = ep.records[-1] if ep.records else {}
+        while (not ok and oid and ep.recovery and state["replace"].get(oid, 0) < ep.recovery
+               and ep.should_retry(last)):
+            state["replace"][oid] = state["replace"].get(oid, 0) + 1
+            if not pick(oid):
+                return False
+            ok = _place(ep.perc.perceive([tid])[tid] or tdesc, tid, "drop" if specs[tid]["template"] == "bin" else "place")
+            last = ep.records[-1]
+        return ok
 
     def place_at(x, y):
         return _place({"center": [float(x), float(y)], "top_z": 0.0, "width": 0.06, "extent_xy": [0.06, 0.06]},

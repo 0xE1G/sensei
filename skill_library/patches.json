@@ -49,6 +49,64 @@
    ]
   }
  },
+ "rim_pinch": {
+  "hollow-wide-tall": {
+   "date": "2026-10-31",
+   "diff": {
+    "depth": [
+     0.0129,
+     0.035
+    ]
+   },
+   "evidence": {
+    "success": 8,
+    "trials": 10
+   },
+   "params": {
+    "depth": 0.035
+   },
+   "source": "investigator",
+   "sources": [
+    "20261031-050348_auto_repair/explore_mug_rim_pinch"
+   ],
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.8009,
+         1.4923
+        ],
+        "handle": [
+         0.0216,
+         0.0335
+        ],
+        "height": [
+         0.0807,
+         0.1083
+        ],
+        "mass": [
+         0.1102,
+         0.2238
+        ],
+        "radius": [
+         0.0352,
+         0.0439
+        ],
+        "wall": [
+         0.0051,
+         0.0077
+        ]
+       },
+       "template": "mug"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
  "top_grasp": {
   "solid-narrow-short": {
    "date": "2026-10-31",

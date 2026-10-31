@@ -76,7 +76,7 @@ def _trial(args):
                               record_video=want_media and cfg["save_video"], perturb=cfg.get("perturb"),
                               extra_cards=cfg.get("extra_cards"), library=cfg.get("library"),
                               performance=cfg.get("performance"), positions=cfg.get("positions"),
-                              patches=cfg.get("patches"))
+                              patches=cfg.get("patches"), recovery=cfg.get("recovery", 0))
     except Exception as e:                       # a broken scene is a result, not a crash
         record, rec = {"task": cfg["task"], "seed": seed, "success": False, "goals_met": 0,
                        "goals_total": len(task["goal"]), "error": f"{type(e).__name__}: {e}",
@@ -84,6 +84,7 @@ def _trial(args):
     # oracle=True: every scene; oracle="on_failure": only where the robot failed (the only case where it matters)
     if cfg.get("oracle") and not (cfg["oracle"] == "on_failure" and record["success"]):
         record["oracle"] = run_oracle(task, seed, perturb=cfg.get("perturb"))
+    record["perturb"] = cfg.get("perturb")             # physics conditions, so a replay is exact
     record["code_version"] = code_version()
     record["config_hash"] = config_hash({k: v for k, v in cfg.items() if k not in ("out_dir", "tag")})
     out = pathlib.Path(cfg["out_dir"])
@@ -117,19 +118,19 @@ def wilson(k, n, z=1.96):
 def trial_cfg(task: str, out_dir, perception: str = "sim", allowed_grasps=None, overrides=None,
               save_failures=True, success_sample=20, save_video=True, save_poses=True, task_kwargs=None,
               perturb=None, extra_cards=None, tag=None, library=None, oracle=False, task_spec=None,
-              performance=None, positions=None, patches=None) -> dict:
+              performance=None, positions=None, patches=None, recovery=0) -> dict:
     return dict(task=task, perception=perception, allowed_grasps=allowed_grasps, overrides=overrides,
                 save_failures=save_failures, success_sample=success_sample, save_video=save_video,
                 save_poses=save_poses, out_dir=str(out_dir), task_kwargs=task_kwargs or {}, perturb=perturb,
                 extra_cards=extra_cards, tag=tag, library=library, oracle=oracle, task_spec=task_spec,
-                performance=performance, positions=positions, patches=patches)
+                performance=performance, positions=positions, patches=patches, recovery=recovery)
 
 
 def run_batch(task: str, n: int = 8, seed0: int = 0, workers: int | None = None, perception: str = "sim",
               allowed_grasps=None, overrides=None, save_failures=True, success_sample=20, save_video=True,
               save_poses=True, run_id: str | None = None, task_kwargs=None, perturb=None, progress=True,
               extra_cards=None, seeds=None, pool: TrialPool | None = None, library=None, oracle=False,
-              task_spec=None) -> dict:
+              task_spec=None, recovery=0, patches=None) -> dict:
     """oracle=True also runs the solvability oracle on every scene; task_spec runs a given spec (e.g. from a prompt)
     instead of building the named task per seed (object placement still varies with the seed)."""
     workers = pool.workers if pool else (workers or default_workers())
@@ -137,7 +138,7 @@ def run_batch(task: str, n: int = 8, seed0: int = 0, workers: int | None = None,
     out_dir = ROOT / "runs" / run_id
     cfg = trial_cfg(task, out_dir, perception, allowed_grasps, overrides, save_failures, success_sample,
                     save_video, save_poses, task_kwargs, perturb, extra_cards, library=library, oracle=oracle,
-                    task_spec=task_spec)
+                    task_spec=task_spec, recovery=recovery, patches=patches)
     seeds = list(seeds) if seeds is not None else list(range(seed0, seed0 + n))
     n = len(seeds)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -24,8 +24,11 @@ class Episode:
 
     def __init__(self, task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                  overrides=None, record_poses=False, record_video=False, perturb=None, extra_cards=None,
-                 library=None, performance=None, positions=None, patches=None):
+                 library=None, performance=None, positions=None, patches=None, recovery=0):
+        """recovery: retries per item after a failed step (re-perceive, next verified grasp); 0 in experiments,
+        so searches and gates measure the skills themselves."""
         self.t0 = time.time()
+        self.recovery = int(recovery)
         self.task, self.seed, self.perception_mode = task, seed, perception_mode
         self.allowed_grasps, self.overrides = allowed_grasps, overrides or {}
         self.scene = build_scene(task, seed=seed, perturb=perturb, positions=positions)
@@ -167,6 +170,49 @@ class Episode:
         return srec
 
     # ------------------------------------------------------------------ fixed plan
+    # ------------------------------------------------------------------ recovery helpers
+    RETRYABLE = {"missed_grasp", "weak_grasp", "collision", "slip", "lift_check_failed", "drop", "wrong_place"}
+
+    def grasp_ranking(self, desc):
+        """Grasp cards that fit this percept, best measured first (the router's order)."""
+        from .skills.router import route
+        from .tasks.planner import fits, grasp_preference
+        allowed = self.allowed_grasps or grasp_preference(self.cards)
+        fitting = [n for n in allowed if fits(self.cards[n], desc)]
+        if not fitting:
+            return allowed[:1]
+        _, why = route(fitting, desc, self.performance)
+        return sorted(fitting, key=lambda n: -why["scores"][n])
+
+    def params_for(self, skill, desc):
+        from .skills.router import patch_for, shape_group
+        return {**patch_for(self.patches, skill, shape_group(desc)), **self.overrides.get(skill, {})}
+
+    def should_retry(self, srec) -> bool:
+        """Recovery decides from what the robot can observe, never from the simulator's verdict: retry only if
+        perception does not see the item on its target, it is still perceivable, and it has not tipped over
+        (a toppled bowl looks like a different, solid object and no skill rights objects yet)."""
+        if srec.get("label") not in self.RETRYABLE or srec.get("place_check"):
+            return False
+        obs = srec.get("observed") or {}
+        if obs.get("after") is None:
+            return False
+        return obs.get("height_ratio", 1.0) >= 0.7
+
+    def retry_grasp(self, desc, tried):
+        """Next grasp for a retry: the best-ranked one not tried yet, else the best one again (chance failures)."""
+        ranked = self.grasp_ranking(desc)
+        return next((g for g in ranked if g not in tried), ranked[0])
+
+    def target_desc(self, target):
+        """Containers keep their first percept (their contents occlude them); objects that can move (a stack base)
+        are perceived again at placing time."""
+        spec = next((o for o in self.task["objects"] if o["id"] == target), {})
+        if spec.get("template") in ("block", "bar", "cylinder"):
+            return self.perc.perceive([target])[target] or self.percepts[target]
+        return self.percepts[target]
+
+    # ------------------------------------------------------------------ fixed plan
     def run_plan(self):
         plan = make_plan(self.task, self.percepts, self.cards, self.allowed_grasps, self.overrides,
                          self.performance, self.patches)
@@ -175,22 +221,38 @@ class Episode:
                 self.records.append({"obj": st["obj"], "target": st["target"], "trace": [], "label": st["error"],
                                      "ok": False, "routing": st.get("routing")})
                 continue
-            srec = self.begin(st["obj"], st["target"], st.get("routing"))
-            if srec["_desc"] is not None:
-                for step in st["steps"]:
-                    name = step["skill"]
-                    if self.cards[name]["kind"] in ("grasp", "grasp_primitive"):
-                        ok = self.grasp(srec, name, step.get("params"))
-                    elif name == "lift":
-                        ok = self.lift(srec, step.get("params"))
-                    elif name == "place_in":
-                        ok = self.place(srec, self.percepts[st["target"]], step.get("params"),
-                                        step.get("mode", "place"), step.get("slot", (0.0, 0.0)))
-                    else:
-                        raise ValueError(name)
-                    if not ok:
+            steps, tried = st["steps"], []
+            for attempt in range(1 + self.recovery):
+                srec = self.begin(st["obj"], st["target"], st.get("routing") if attempt == 0 else None)
+                if attempt:
+                    # Recovery: the object was re-perceived (it may have fallen or tipped); next verified grasp.
+                    if srec["_desc"] is None:
+                        self.finish(srec, st["goal"])
                         break
-            self.finish(srec, st["goal"])
+                    g = self.retry_grasp(srec["_desc"], tried)
+                    srec["routing"] = {"reason": f"recovery attempt {attempt}", "card": g}
+                    steps = [{"skill": g, "params": self.params_for(g, srec["_desc"])},
+                             {"skill": "lift", "params": self.params_for("lift", srec["_desc"])},
+                             {**st["steps"][2], "params": self.params_for("place_in", srec["_desc"])}]
+                srec["attempt"] = attempt
+                if srec["_desc"] is not None:
+                    for step in steps:
+                        name = step["skill"]
+                        if self.cards[name]["kind"] in ("grasp", "grasp_primitive"):
+                            tried.append(name)
+                            ok = self.grasp(srec, name, step.get("params"))
+                        elif name == "lift":
+                            ok = self.lift(srec, step.get("params"))
+                        elif name == "place_in":
+                            ok = self.place(srec, self.target_desc(st["target"]), step.get("params"),
+                                            step.get("mode", "place"), step.get("slot", (0.0, 0.0)))
+                        else:
+                            raise ValueError(name)
+                        if not ok:
+                            break
+                self.finish(srec, st["goal"])
+                if not self.should_retry(srec):
+                    break
 
     # ------------------------------------------------------------------ result
     def record(self, extra=None) -> dict:
@@ -206,7 +268,8 @@ class Episode:
             "wall_time_s": round(time.time() - self.t0, 2),
             "objects": {k: {kk: vv for kk, vv in v.items() if kk != "params"} | {"params": v["params"]}
                         for k, v in self.scene.objects.items()},
-            "percepts": self.percepts, "task_spec": self.task, **(extra or {}),
+            "percepts": self.percepts, "task_spec": self.task, "recovery": self.recovery,
+            "recovery_attempts": sum(1 for r in self.records if r.get("attempt")), **(extra or {}),
         }
         return rec
 
@@ -219,13 +282,13 @@ class Episode:
 def run_episode(task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                 overrides=None, record_poses=False, record_video=False, perturb=None,
                 extra_cards=None, library=None, performance=None, positions=None,
-                patches=None, program=None) -> tuple[dict, Recorder]:
+                patches=None, program=None, recovery=0) -> tuple[dict, Recorder]:
     """`library` replaces the active skill library (a snapshot, e.g. the seed library); `extra_cards` adds
     cards that are not in it (exploration candidates, references); `positions` ({id: (x, y, yaw)}) rebuilds an
     exact earlier layout (one-change replays); `program` (or task["program"]) runs a model-written plan program
     instead of the planner's fixed plan."""
     ep = Episode(task, seed, perception_mode, allowed_grasps, overrides, record_poses, record_video, perturb,
-                 extra_cards, library, performance, positions, patches)
+                 extra_cards, library, performance, positions, patches, recovery)
     program = program or task.get("program")
     extra = None
     if program:
