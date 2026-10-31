@@ -381,6 +381,41 @@ round started by the search (see status).
    one-line settings summary, banner with a progress bar, repair/learning steps as an icon row with one activity
    line, outcome = big numbers + one verdict, details behind "why?". Fixed run_kind: demo folders ending in
    "_repair" were classified as auto-repair runs (only a studio job's "repair" folder is).
+4n. **Theme v3 + robot cameras**: fonts Space Grotesk (headings) / Inter (UI) / JetBrains Mono (code, numbers) from
+   Google Fonts (system fallbacks offline); near-black dark palette, Kintsugi gold for primary buttons and the brand,
+   uppercase tracked section labels, KPI strip as one divided panel, digit-tile `Clock` (Studio job time, Episodes
+   episode time). Viewer draws two robot cameras into the same canvas (scissored viewports, `RobotCameras` in
+   viewer.jsx): a wrist camera on the "hand" body looking along its z axis (fingers) and a fixed front camera;
+   toggle "cameras on/off" in the corner; used by Studio (preview + live) and Episodes. Layout stability: every
+   grid child min-width 0, code blocks scroll, side columns fixed (300 / 290 / 400 px) and sticky, main columns
+   minmax(0, 1fr): opening details no longer resizes neighbouring cards (measured: widths unchanged).
+4o. **UI pass (user feedback)**: gold only for the logo and primary buttons (icons, dots white/ink). Robot cameras
+   moved out of the main view into a strip of rounded tiles below it (`Regions` in viewer.jsx renders the main
+   camera and each robot camera into regions measured from placeholder elements; rounded corners via rings in the
+   page colour). Episodes picker: run row + episode-tile row (scrolls past two rows). Headings shortened to
+   professional titles, explanatory sentences removed or reduced to one-line captions. Skills: card header,
+   facts row (works on / success check / evidence), success by shape, patches, versions; "Library timeline" strip
+   at the top. **Label rule as applied in the UI (user decision 2026-10-31)**: "measured" is the default for
+   everything shown and is not marked; hypothesis / confirmed / rejected are always tagged in words where they
+   appear; no separate legend.
+   Follow-up pass: robot cameras are small translucent rounded tiles inside the main view (bottom left): each
+   camera renders to an offscreen target, drawn as a quad with a rounded alpha mask at 0.9 opacity
+   (`RobotCameras` in viewer.jsx); camera toggle = icon at bottom right. Step rows, hypothesis cards and gate
+   cards have no coloured side bars (status icon or tag instead). One tag style for every status chip (18 px,
+   uppercase, tinted). Experiments sidebar = "Experiment log" (grouped rows: time · title · short outcome).
+   Skills timeline: scrollbar hidden, arrow buttons + edge fades appear only when it overflows.
+   Studio: prompt box (auto-growing textarea, model pill and round send button inside, keyboard hint),
+   suggestion chips; "Recent runs" strip always visible, the running job or else the newest run is selected on
+   open, the selected run is highlighted. Logo: white ring (bowl) crossed by a gold seam on a dark tile
+   (`web/public/logo.svg`, favicon, inline in the sidebar; server route /logo.svg for the built app).
+   Navigation moved to a sticky translucent top bar (logo + wordmark, nav groups Work / Insight / Library split
+   by thin separators); content uses the full width; sticky side columns sit at top 76 px. `ScrollRow` (ui.jsx):
+   horizontal row with arrows + edge fades instead of a scrollbar (recent runs). The studio job poll retries
+   failed requests (5 in a row ends following) instead of staying "running" after one failed request.
+   Studio playback: a finished run plays scene 1 of its latest phase and then the next scenes in order (playlist,
+   also after a live job ends); the scene being viewed is outlined in the tiles; past runs are attached as not
+   running (the live player only follows jobs known to run); a started job is added to Recent runs at once and
+   highlighted. Prompt box v2: 3 lines tall, "New task" label, gold gradient border + glow, suggestion icons.
 
 **Remaining, in order** (plan build order 8c onwards):
 6. done: Model-written primitives (8c), see 4g.
@@ -415,7 +450,8 @@ Headless Linux: `MUJOCO_GL=egl`, or `xvfb-run -a` with `MUJOCO_GL=glfw` if EGL i
 - Every model output is validated against a schema; on failure feed the error back once, then reject with a reason.
 - Simulator is the source of truth for outcomes; success predicates and failure labels are deterministic code.
 - Log every trial with seed, scene, skill card version, code version, outcome. Never tune on held-out objects.
-- Every statement in the UI is labelled measured / hypothesis / confirmed / rejected.
+- Every statement in the UI is labelled measured / hypothesis / confirmed / rejected (measured is the unmarked
+  default; the other three are always tagged in words).
 
 ## Plan documents
 - **Full implementation plan: `docs/implementation_plan.md`** (read it before starting a new step: templates, task generation, skills and repair loop, web app, build order, optional improvements, demo script, metrics, risks).

@@ -46,25 +46,28 @@ export default function Investigator({ runs }) {
               <div className="grid">
                 <div className="kpis">
                   <div className="kpi" title="The model never sees the simulator's label"><div className="kpi-value">{Math.round(100 * m.top1_label_accuracy)}%</div>
-                    <div className="kpi-label">top cause matches the simulator <Chip status="measured" /></div></div>
+                    <div className="kpi-label">Top-cause accuracy</div></div>
                   <div className="kpi"><div className="kpi-value">{m.cases_with_a_confirmed_cause}/{m.diagnosed}</div>
-                    <div className="kpi-label">failures explained by a confirmed cause <Chip status="measured" /></div></div>
+                    <div className="kpi-label">Explained failures</div></div>
                   <div className="kpi"><div className="kpi-value"><span className="ok">{m.confirmed}</span> / <span className="bad">{m.rejected}</span></div>
-                    <div className="kpi-label">hypotheses confirmed / rejected <Chip status="measured" /></div></div>
-                  <div className="kpi"><div className="kpi-value small">{rep.backend}</div><div className="kpi-label">{rep.model} · library {rep.library}</div></div>
+                    <div className="kpi-label">Hypotheses confirmed / rejected</div></div>
+                  <div className="kpi"><div className="kpi-value small">{rep.backend}</div><div className="kpi-label">Diagnoser · {rep.model} · {rep.library} library</div></div>
                 </div>
                 <div className="split">
-                  <Card title="Failures">
+                  <Card title="Cases">
                     <div className="list">
                       {cases.map((x, i) => (
                         <button key={i} className={i === ci ? "on" : ""} onClick={() => setCi(i)}>
                           <span>{x.cluster}<div className="sub">{nice(x.simulator_label)}</div></span>
-                          <Chip status={x.hypotheses.some((h) => h.verdict === "confirmed") ? "confirmed" : "rejected"} />
+                          {(() => { const ok = x.hypotheses.some((h) => h.verdict === "confirmed"); return (
+                            <span className={`step-icon ${ok ? "ok" : "fail"}`} title={ok ? "cause confirmed" : "no cause confirmed"}>
+                              <svg viewBox="0 0 16 16">{ok ? <path d="M3.5 8.5l3 3 6-7" /> : <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />}</svg>
+                            </span>); })()}
                         </button>
                       ))}
                     </div>
                     {m.by_simulator_label && (
-                      <Details label="accuracy by failure type">
+                      <Details label="Accuracy by failure type">
                         <HBars unit="%" max={100} rows={Object.entries(m.by_simulator_label).map(([l, v]) => {
                           const [k, n] = String(v).split("/").map(Number);                       // "4/4"
                           return { label: nice(l), sub: `${k}/${n}`, value: n ? Math.round((100 * k) / n) : 0 };
@@ -76,13 +79,13 @@ export default function Investigator({ runs }) {
                     <Guard resetKey={`${id}/${ci}`} data={c}>
                       <div className="grid">
                         <div className="verdict-line">
-                          <span>simulator: <b>{nice(c.simulator_label)}</b></span>
-                          <span>model's top cause: <b className={c.top_label_correct ? "ok" : "bad"}>{nice(c.top_label)} {c.top_label_correct ? "✓" : "✗"}</b></span>
+                          <span><span className="sub">Simulator label</span> <b>{nice(c.simulator_label)}</b></span>
+                          <span><span className="sub">Diagnosis</span> <b className={c.top_label_correct ? "ok" : "bad"}>{nice(c.top_label)} {c.top_label_correct ? "✓" : "✗"}</b></span>
                           <span className="sub">{nice(c.task)} · seed {c.seed}</span>
                         </div>
                         <div className="flow">
                           <section className="card flow-col">
-                            <header className="card-head"><h3>1 · What it saw</h3><Chip status="measured" /></header>
+                            <header className="card-head"><h3>Evidence</h3></header>
                             <ul className="facts">
                               {c.ledger.filter((e) => e.status === "measured").slice(0, 4).map((e, i) => <li key={`l${i}`}>{e.text}</li>)}
                               {Object.entries(c.evidence?.derived || {}).map(([k, v]) => fact(k, v)).filter(Boolean).map((f, i) => <li key={`d${i}`}>{f}</li>)}
@@ -90,23 +93,25 @@ export default function Investigator({ runs }) {
                             </ul>
                           </section>
                           <section className="card flow-col wide">
-                            <header className="card-head"><h3>2 · Possible causes, each tested by changing one thing</h3></header>
+                            <header className="card-head"><h3>Hypotheses</h3><span className="sub">each tested by a one-change replay</span></header>
                             <div className="hyps">
                               {c.hypotheses.map((h, i) => (
                                 <div key={i} className={`hyp ${h.verdict || "untested"}`}>
-                                  <div className="hyp-cause">{h.cause}</div>
-                                  <div className="hyp-test">
-                                    <span className="pill">{testText(h.test)}</span>
-                                    <span className="sub">{h.replay ? (h.replay.step_ok ? "→ the step then succeeded" : `→ still failed (${nice(h.replay.label)})`) : "not replayed"}</span>
+                                  <div className="hyp-top">
+                                    <span className="hyp-cause">{h.cause}</span>
                                     <Chip status={VERDICT[h.verdict] || "hypothesis"}>{h.verdict || "untested"}</Chip>
+                                  </div>
+                                  <div className="hyp-test">
+                                    <code>{testText(h.test)}</code>
+                                    <span className="sub">{h.replay ? (h.replay.step_ok ? "step succeeded" : `still failed · ${nice(h.replay.label)}`) : "not replayed"}</span>
                                   </div>
                                 </div>
                               ))}
                             </div>
                           </section>
                         </div>
-                        {c.summary && <p className="sub">Model summary: {c.summary}</p>}
-                        <Details label="everything the model saw (observable evidence only)">
+                        {c.summary && <p className="caption">{c.summary}</p>}
+                        <Details label="Raw evidence">
                           <Code>{JSON.stringify({ derived: c.evidence?.derived, perceived: c.evidence?.perceived, observed: c.evidence?.observed,
                                                   nearby_objects: c.evidence?.nearby_objects, arm_contacts: c.evidence?.arm_contacts }, null, 1)}</Code>
                         </Details>

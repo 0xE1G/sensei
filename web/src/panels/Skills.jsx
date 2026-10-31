@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSkills } from "../api.js";
 import { RateBar } from "../charts.jsx";
 import { Card, Chip, Code, Details, Guard, Loading, useAsync } from "../ui.jsx";
@@ -24,6 +24,12 @@ function origin(card) {
   return ["confirmed", "found by search · gated"];
 }
 
+function shortOrigin(card) {
+  const src = card.lineage?.[card.lineage.length - 1]?.source || "seed";
+  if (card.kind === "composite") return "program";
+  return src === "seed" ? "seed" : src.includes("model") ? "model" : src.includes("handwritten") ? "manual" : "search";
+}
+
 function preconditions(req) {
   if (!req) return "any object";
   const out = [];
@@ -44,75 +50,104 @@ function CardDetail({ card, history, performance, patches }) {
   const myPatches = Object.entries(patches[card.name] || {});
   const versions = [...(history || []), card];
   const events = versions.flatMap((v) => (v.lineage || []).filter((e) => e.version === v.version || versions.length === 1));
+  const evidence = perf.reduce((a, [, e]) => [a[0] + e.success, a[1] + e.trials], [0, 0]);
   return (
     <div className="grid">
-      <Card title={`${nice(card.name)} · v${card.version}`} actions={<Chip status={st}>{label}</Chip>}>
+      <section className="card">
+        <div className="skill-head">
+          <h3>{nice(card.name)}</h3><span className="ver">v{card.version}</span>
+          <Chip status={st === "measured" ? "hypothesis" : st}>{label}</Chip>
+        </div>
         <p className="lead">{card.description}</p>
-        <div className="kv-line"><span>works on</span><span>{preconditions(card.requires)}</span></div>
-        {card.check && <div className="kv-line"><span>success check</span><span className="sub">{nice(card.check)}</span></div>}
+        <div className="facts-row">
+          <div><div className="k">Works on</div><div className="v">{preconditions(card.requires)}</div></div>
+          <div><div className="k">Success check</div><div className="v">{nice(card.check) || "–"}</div></div>
+          <div><div className="k">Evidence</div><div className="v">{evidence[1] ? <RateBar k={evidence[0]} n={evidence[1]} /> : "–"}</div></div>
+        </div>
         {perf.length > 0 && (
-          <div className="where">
-            <div className="sub">where it works (measured)</div>
-            {perf.map(([g, e]) => <div key={g} className="kv-line"><span>{group(g)}</span><RateBar k={e.success} n={e.trials} /></div>)}
-          </div>
+          <>
+            <div className="section-label">Success by shape</div>
+            {perf.map(([g, e]) => <div key={g} className="perf-row"><span>{group(g)}</span><RateBar k={e.success} n={e.trials} /></div>)}
+          </>
         )}
         {myPatches.length > 0 && (
-          <div className="where">
-            <div className="sub">parameter patches for specific shapes</div>
+          <>
+            <div className="section-label">Patches</div>
             {myPatches.map(([g, e]) => (
-              <div key={g} className="kv-line"><span>{group(g)}</span>
-                <span>{Object.entries(e.diff || e.params || {}).map(([k, v]) => Array.isArray(v) ? `${k}: ${v[0]} → ${v[1]}` : `${k} = ${v}`).join(", ")}
-                  <span className="sub"> · {e.source}{e.evidence ? ` · ${e.evidence.success}/${e.evidence.trials}` : ""}</span></span></div>
+              <div key={g} className="perf-row"><span>{group(g)}</span>
+                <span className="sub">{Object.entries(e.diff || e.params || {}).map(([k, v]) => Array.isArray(v) ? `${k} ${round(v[0])} → ${round(v[1])}` : `${k} = ${round(v)}`).join(", ")}
+                  {e.evidence ? ` · ${e.evidence.success}/${e.evidence.trials}` : ""}</span></div>
             ))}
-          </div>
+          </>
         )}
-        <Details label={`parameters (${Object.keys(card.params || {}).length})`}>
+        <Details label={`Parameters (${Object.keys(card.params || {}).length})`}>
           <table>
             <tbody>{Object.entries(card.params || {}).map(([k, v]) => (
-              <tr key={k}><td>{k}</td><td className="num">{v.default}</td><td className="sub">{v.meaning || v.unit || ""} {v.range ? `[${v.range.join(", ")}]` : ""}</td></tr>
+              <tr key={k}><td>{k}</td><td className="num">{round(v.default)}</td><td className="sub">{v.meaning || v.unit || ""} {v.range ? `[${v.range.join(", ")}]` : ""}</td></tr>
             ))}</tbody>
           </table>
         </Details>
-        {card.code && <Details label="code (model-written, passed the gates)"><Code>{card.code}</Code></Details>}
-        {card.program && <Details label="program"><Code>{card.program}</Code></Details>}
-      </Card>
+        {card.code && <Details label="Code"><Code>{card.code}</Code></Details>}
+        {card.program && <Details label="Program"><Code>{card.program}</Code></Details>}
+      </section>
       {events.length > 0 && (
-        <Card title="History of this skill">
-          <div className="timelineL">
+        <Card title="Versions">
+          <ol className="versions">
             {events.map((e, i) => (
-              <div key={i}>
-                <b>v{e.version}</b> · {e.source}{e.date ? ` · ${e.date}` : ""}
-                {e.trigger && <div className="sub">because {e.trigger.skill} failed on {nice(e.trigger.obj)} ({nice(e.trigger.label)})</div>}
-                {e.written_by && <div className="sub">written by {e.written_by.backend}, {e.attempts} attempt(s)</div>}
-                {e.results?.held_out && <div className="sub">held-out objects: {heldOut(e.results.held_out)}</div>}
-                {e.diff && Object.keys(e.diff).length > 0 && <div className="sub">changed: {Object.entries(e.diff).map(([k, [a, b]]) => `${k} ${round(a)} → ${round(b)}`).join(", ")}</div>}
-                {e.requires_diff && <div className="sub">preconditions: {preconditions(e.requires_diff[0])} → {preconditions(e.requires_diff[1])}</div>}
-              </div>
+              <li key={i}>
+                <span className="vtag">v{e.version}</span>
+                <div>
+                  <div>{e.source}{e.date ? <span className="sub"> · {e.date}</span> : null}</div>
+                  {e.trigger && <div className="sub">Trigger: {e.trigger.skill} failed on {nice(e.trigger.obj)} ({nice(e.trigger.label)})</div>}
+                  {e.written_by && <div className="sub">Written by {e.written_by.backend}, {e.attempts} attempt(s)</div>}
+                  {e.results?.held_out && <div className="sub">Held-out: {heldOut(e.results.held_out)}</div>}
+                  {e.diff && Object.keys(e.diff).length > 0 && <div className="sub">Changed: {Object.entries(e.diff).map(([k, [a, b]]) => `${k} ${round(a)} → ${round(b)}`).join(", ")}</div>}
+                  {e.requires_diff && <div className="sub">Preconditions: {preconditions(e.requires_diff[0])} → {preconditions(e.requires_diff[1])}</div>}
+                </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </Card>
       )}
     </div>
   );
 }
 
-// Every change to the library in time order: new cards (lineage), patches, routing evidence sources.
-function Growth({ d, select }) {
+// Every change to the library in time order: seed skills, new cards, patches, verified programs.
+function Timeline({ d, select }) {
+  const strip = useRef(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const update = () => {
+    const el = strip.current;
+    if (el) setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  const scroll = (dir) => strip.current?.scrollBy({ left: dir * strip.current.clientWidth * 0.7, behavior: "smooth" });
   const ev = [];
-  for (const c of d.active) for (const e of c.lineage || []) if (e.source !== "seed") ev.push({ date: e.date, what: `${nice(c.name)} v${e.version}`, how: e.source, card: c.name });
-  for (const [sk, gs] of Object.entries(d.patches)) for (const [g, e] of Object.entries(gs)) ev.push({ date: e.date, what: `${nice(sk)} patch for ${group(g)}`, how: e.source || "search", card: sk });
-  for (const c of d.composites) ev.push({ date: c.lineage?.[0]?.date, what: `program ${nice(c.name)}`, how: "verified program", card: c.name });
+  for (const c of d.active) for (const e of c.lineage || []) if (e.source !== "seed") ev.push({ date: e.date, what: `${nice(c.name)} v${e.version}`, how: e.source, card: c.name, kind: "new" });
+  for (const [sk, gs] of Object.entries(d.patches)) for (const [g, e] of Object.entries(gs)) ev.push({ date: e.date, what: `${nice(sk)} patch`, how: group(g), card: sk, kind: "patch" });
+  for (const c of d.composites) ev.push({ date: c.lineage?.[0]?.date, what: nice(c.name), how: "verified program", card: c.name, kind: "new" });
   ev.sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const seeds = d.active.filter((c) => (c.lineage?.[0]?.source || "seed") === "seed").map((c) => nice(c.name));
+  const seeds = d.active.filter((c) => (c.lineage?.[0]?.source || "seed") === "seed");
   return (
-    <Card title="How the library grew" status="confirmed">
-      <div className="growth">
-        <div className="growth-item seed"><b>seed</b><span>{seeds.join(", ")}</span></div>
+    <Card title="Library timeline" actions={<span className="sub">{seeds.length} seed skills · {ev.length} verified changes</span>}>
+      <div className={`tl-wrap ${edge.left ? "fade-l" : ""} ${edge.right ? "fade-r" : ""}`}>
+      {edge.left && <button className="tl-arrow left" onClick={() => scroll(-1)} aria-label="earlier">‹</button>}
+      {edge.right && <button className="tl-arrow right" onClick={() => scroll(1)} aria-label="later">›</button>}
+      <div className="timeline-strip" ref={strip} onScroll={update}>
+        <button className="tl-node seed" onClick={() => select(seeds[0]?.name)} title={seeds.map((c) => nice(c.name)).join(", ")}>
+          <b>Seed library</b><span>{seeds.length} hand-written skills</span>
+        </button>
         {ev.map((e, i) => (
-          <button key={i} className="growth-item" onClick={() => select(e.card)}>
-            <b>{e.what}</b><span>{e.how}{e.date ? ` · ${e.date}` : ""}</span>
+          <button key={i} className={`tl-node ${e.kind}`} onClick={() => select(e.card)} title={`${e.what} · ${e.how}${e.date ? ` · ${e.date}` : ""}`}>
+            <b>{e.what}</b><span>{e.how}</span>
           </button>
         ))}
+      </div>
       </div>
     </Card>
   );
@@ -120,8 +155,8 @@ function Growth({ d, select }) {
 
 const GROUPS = [
   ["Grasps", (c) => c.kind === "grasp"],
-  ["Model-written skills", (c) => c.impl === "generated"],
-  ["Moving and placing", (c) => c.kind !== "grasp" && c.impl !== "generated"],
+  ["Generated skills", (c) => c.impl === "generated"],
+  ["Transport and placing", (c) => c.kind !== "grasp" && c.impl !== "generated"],
 ];
 
 export default function Skills() {
@@ -139,25 +174,25 @@ export default function Skills() {
               <button key={c.name} className={card?.name === c.name ? "on" : ""} onClick={() => setSel(c.name)}>
                 <span className="exp-title">{nice(c.name)}</span>
                 <span className="sub">v{c.version}</span>
-                <Chip status={origin(c)[0]} />
+                <span className="origin-word">{shortOrigin(c)}</span>
               </button>
             ))}
           </div>
         );
         return (
           <div className="grid">
+            <Guard data={d}><Timeline d={d} select={setSel} /></Guard>
             <div className="split">
-              <Card title="Skill library">
+              <Card title="Library">
                 <div className="exp-list">
                   {GROUPS.map(([t, f]) => list(t, d.active.filter(f)))}
                   {list("Verified programs", d.composites)}
-                  {list("Search primitives (used by the repair search)", d.primitives)}
-                  {list("Reference (hand-written, comparison only)", d.reference)}
+                  {list("Search primitives", d.primitives)}
+                  {list("Reference", d.reference)}
                 </div>
               </Card>
               {card && <Guard resetKey={card.name} data={card}><CardDetail card={card} history={d.history[card.name]} performance={d.performance} patches={d.patches} /></Guard>}
             </div>
-            <Guard data={d}><Growth d={d} select={setSel} /></Guard>
           </div>
         );
       }}

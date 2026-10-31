@@ -512,6 +512,10 @@ def studio_live_episode(job_id: str, episode: str, offset: int = 0):
 if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
+    @app.get("/logo.svg")
+    def logo():
+        return FileResponse(WEB_DIST / "logo.svg", media_type="image/svg+xml")
+
     @app.get("/")
     def index():
         return FileResponse(WEB_DIST / "index.html")

@@ -1,4 +1,4 @@
-import { Component, useEffect, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
 
 // Every statement in the app carries one of these labels.
 export const STATUS = {
@@ -15,9 +15,13 @@ const STATUS_HELP = {
   rejected: "rejected: a test in simulation contradicted it",
 };
 
-// With text: a labelled pill. Without: a small coloured dot whose hover says what the label means.
+// Status tags. "measured" is the default for everything the app shows (counted by code in simulation), so it is
+// not marked; hypothesis / confirmed / rejected are always shown in words.
 export function Chip({ status, children }) {
-  if (!children) return <span className={`dot-label dot-${status}`} title={STATUS_HELP[status] || status} aria-label={status} />;
+  if (!children) {
+    if (status === "measured") return null;
+    return <span className={`chip chip-${status} status-tag`} title={STATUS_HELP[status] || ""}>{status}</span>;
+  }
   return <span className={`chip chip-${status}`} title={STATUS_HELP[status] || ""}>{children}</span>;
 }
 
@@ -127,5 +131,41 @@ export function KV({ rows }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+// mm:ss as digit tiles (job time, episode time)
+export function Clock({ seconds, label }) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const d = `${String(Math.floor(s / 60)).padStart(2, "0")}${String(s % 60).padStart(2, "0")}`;
+  return (
+    <span className="clock" title={label} aria-label={`${label || "time"} ${d.slice(0, 2)}:${d.slice(2)}`}>
+      <b>{d[0]}</b><b>{d[1]}</b><i>:</i><b>{d[2]}</b><b>{d[3]}</b>
+    </span>
+  );
+}
+
+// A horizontal row that scrolls with arrow buttons and edge fades instead of a visible scrollbar.
+export function ScrollRow({ className = "", children }) {
+  const ref = useRef(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const update = () => {
+    const el = ref.current;
+    if (el) setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    update();
+    const ro = new ResizeObserver(update);
+    if (ref.current) ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(update);
+  const scroll = (dir) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.7, behavior: "smooth" });
+  return (
+    <div className={`tl-wrap ${edge.left ? "fade-l" : ""} ${edge.right ? "fade-r" : ""}`}>
+      {edge.left && <button type="button" className="tl-arrow left" onClick={() => scroll(-1)} aria-label="scroll left">‹</button>}
+      {edge.right && <button type="button" className="tl-arrow right" onClick={() => scroll(1)} aria-label="scroll right">›</button>}
+      <div className={`scroll-row ${className}`} ref={ref} onScroll={update}>{children}</div>
+    </div>
   );
 }

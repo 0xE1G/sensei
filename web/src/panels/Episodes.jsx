@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getReplay, getRun, getTrial } from "../api.js";
-import { Card, Chip, Details, Guard, Loading, RunPicker, useAsync } from "../ui.jsx";
+import { Card, Chip, Clock, Details, Guard, Loading, useAsync } from "../ui.jsx";
 import { loadMeshGeometries, Viewer } from "../viewer.jsx";
 
 const nice = (s) => (s || "").replace(/_/g, " ");
@@ -27,13 +27,19 @@ export default function Episodes({ runs, sel, open }) {
 
   return (
     <div className="grid">
-      <div className="toolbar">
-        <RunPicker runs={withReplays} kinds={["task"]} value={sel.run} onChange={(id) => open({ run: id, trial: null })} label="Run" />
+      <div className="toolbar ep-toolbar">
+        <div className="ep-row">
+          <span className="sub">Run</span>
+          <select value={sel.run || ""} onChange={(e) => open({ run: e.target.value, trial: null })}>
+            <option value="" disabled>choose a run ({withReplays.length})</option>
+            {withReplays.map((r) => <option key={r.id} value={r.id}>{r.title || r.id}{r.trials != null ? ` · ${r.success}/${r.trials}` : ""}</option>)}
+          </select>
+        </div>
         <Loading state={run}>
           {(r) => r && (
-            <div className="picker">
-              <span>Episode (red = failed)</span>
-              <div className="ep-tiles">
+            <div className="ep-row">
+              <span className="sub">Episodes</span>
+              <div className="ep-tiles" title="Red = failed">
                 {r.episodes.map((e, i) => (
                   <button key={e.name} className={`tile ${e.success ? "ok" : e.success === false ? "fail" : ""} ${e.name === sel.trial ? "on" : ""}`}
                           title={e.success ? "succeeded" : (e.labels || []).map(nice).join(", ")} onClick={() => open({ trial: e.name })}>{i + 1}</button>
@@ -104,6 +110,7 @@ function Episode({ d }) {
         <div className="timeline2">
           <button className="btn icon" onClick={() => { if (frame >= frames.length - 1) setFrame(0); setPlaying((p) => !p); }}
                   title={playing ? "pause" : "play"}>{playing ? "❚❚" : "▶"}</button>
+          <Clock seconds={t} label="episode time" />
           <div className="seg-track" ref={track}
                onClick={(e) => { const r = track.current.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * T); }}>
             {segs.map((s, i) => (
@@ -134,21 +141,26 @@ function Episode({ d }) {
             {trial.program_error && <p className="bad">{trial.program_error}</p>}
           </Card>
         )}
-        <Card title="Steps" status="measured">
+        <Card title="Steps">
           <ol className="steps">
             {subtasks.map((st, i) => (
               <li key={i} className={`${st.ok ? "ok" : "fail"} ${i === activeStep ? "on" : ""}`}>
-                <span className="step-head">{nice(st.obj)} → {nice(st.target) || "–"}</span>
-                <span className="step-skills">
-                  {(st.trace || []).map((s, j) => (
-                    <button key={j} className={`skill-pill ${s.ok ? "" : "fail"}`} onClick={() => seek(s.t0)} title={s.check}>{s.skill}</button>
-                  ))}
-                  {st.label && <span className="bad"> {nice(st.label)}</span>}
+                <span className={`step-icon ${st.ok ? "ok" : "fail"}`} aria-label={st.ok ? "succeeded" : "failed"}>
+                  <svg viewBox="0 0 16 16">{st.ok ? <path d="M3.5 8.5l3 3 6-7" /> : <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />}</svg>
                 </span>
+                <div className="step-body">
+                  <div className="step-head">{nice(st.obj)} <span className="step-arrow">→</span> {nice(st.target) || "–"}</div>
+                  <div className="step-skills">
+                    {(st.trace || []).map((s, j) => (
+                      <button key={j} className={`skill-pill ${s.ok ? "" : "fail"}`} onClick={() => seek(s.t0)} title={s.check}>{s.skill}</button>
+                    ))}
+                    {st.label && <span className="step-label">{nice(st.label)}</span>}
+                  </div>
+                </div>
               </li>
             ))}
           </ol>
-          <Details label="task details">
+          <Details label="Task details">
             <ul className="sub">
               {(trial.task_spec?.objects || []).map((o) => <li key={o.id}>{o.id}: {o.template} ({o.role})</li>)}
               {(trial.task_spec?.goal || []).map((g, i) => <li key={`g${i}`}>goal: {g.obj} {g.pred} {g.target}{g.upright ? " (upright)" : ""}</li>)}

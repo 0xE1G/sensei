@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { forget, getReplay, studio } from "../api.js";
-import { Chip, Code, Details, useAsync } from "../ui.jsx";
+import { Chip, Clock, Code, Details, ScrollRow, useAsync } from "../ui.jsx";
 import { loadMeshGeometries, Viewer } from "../viewer.jsx";
 
 // ---------------------------------------------------------------------------------------------- words
@@ -51,7 +51,9 @@ function sourceChip(src) {
 // ---------------------------------------------------------------------------------------------- live player
 // Workers simulate at full speed and write pose frames; this buffers one episode and plays it at real time,
 // then jumps to the freshest episode it has not shown yet. Clicking a worker or an episode tile switches.
-function useLivePlayer(jobId, running) {
+function useLivePlayer(jobId, running, onSavedEnd) {
+  const onEnd = useRef(onSavedEnd);
+  onEnd.current = onSavedEnd;
   const [workers, setWorkers] = useState([]);
   const [, setTick] = useState(0);
   const buf = useRef(null);
@@ -128,9 +130,14 @@ function useLivePlayer(jobId, running) {
         b.idx = Math.min(b.idx + dt * 30, b.frames.length - 1);
         const i = Math.floor(b.idx);
         if (i !== shown) { shown = i; setTick((t) => t + 1); }
-        if (b.done && i >= b.frames.length - 1 && !b.saved && running) {
+        if (b.done && i >= b.frames.length - 1 && (running || b.saved)) {
           if (!hold.current) hold.current = now + 1500;
-          else if (now > hold.current) pickNext();
+          else if (now > hold.current && !b.ended) {
+            b.ended = true;
+            // a saved replay ends: while a job runs, go back to live; otherwise play the next scene
+            if (!running && onEnd.current && !b.meta?.tag) onEnd.current(b);
+            else if (running) pickNext();
+          }
         }
       } else if (b.done && running) pickNext();
       raf = requestAnimationFrame(tick);
@@ -143,31 +150,83 @@ function useLivePlayer(jobId, running) {
   const pose = b && b.frames.length ? b.frames[Math.floor(b.idx)] : null;
   const t = pose ? pose.t : 0;
   const lastSkill = b ? [...b.events].reverse().find((e) => e.kind === "skill_end" && e.t <= t) : null;
-  return { workers, watch, b, pose, t, lastSkill, replayFromStart: () => b && ((b.idx = 0), (hold.current = 0)) };
+  return { workers, watch, b, pose, t, lastSkill, replayFromStart: () => b && ((b.idx = 0), (hold.current = 0), (b.ended = false)) };
 }
 
 // ---------------------------------------------------------------------------------------------- pieces
+// suggestion icons by what the example asks for (24px stroke icons)
+const SUGGEST_ICONS = [
+  [/sort|colou?r/i, <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>],
+  [/stack/i, <path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5" />],
+  [/plate|zone|push|slide/i, <path d="M4 12h12M12 6l6 6-6 6M20 5v14" />],
+  [/mug|cup|bottle/i, <path d="M6 7h10v8a4 4 0 01-4 4H10a4 4 0 01-4-4zM16 9h1.5a2.5 2.5 0 010 5H16" />],
+  [/./, <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />],
+];
+const suggestIcon = (text) => SUGGEST_ICONS.find(([re]) => re.test(text))[1];
+
 function Composer({ info, prompt, setPrompt, backend, setBackend, onSubmit, busy, locked }) {
+  const grow = (el) => { if (el) { el.style.height = "auto"; el.style.height = `${Math.max(72, Math.min(el.scrollHeight, 200))}px`; } };
+  const ref = useRef(null);
+  useEffect(() => grow(ref.current), [prompt]);
+  const canSend = prompt.trim() && !busy && !locked;
   return (
-    <section className="composer2">
-      <form onSubmit={(e) => { e.preventDefault(); if (prompt.trim() && !busy && !locked) onSubmit(); }}>
-        <div className="prompt-bar">
-          <textarea rows={1} value={prompt} placeholder="Tell the robot what to do, e.g. put the bowl on the blue tray" disabled={locked}
+    <section className="composer3">
+      <form onSubmit={(e) => { e.preventDefault(); if (canSend) onSubmit(); }}>
+        <div className={`prompt-box ${locked ? "locked" : ""}`}>
+          <div className="prompt-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+            New task
+          </div>
+          <textarea ref={ref} rows={3} value={prompt} disabled={locked}
+                    placeholder={locked ? "A job is running…" : "Describe a task for the robot, e.g. sort the blocks onto the trays of the same colour"}
                     onChange={(e) => setPrompt(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form.requestSubmit(); } }} />
-          {info && (
-            <select className="model-pill" value={backend || ""} onChange={(e) => setBackend(e.target.value)} title="Model that reads the request and writes the plan">
-              {info.backends.map((b) => <option key={b} value={b}>{BACKEND_SHORT[b] || b}</option>)}
-            </select>
-          )}
-          <button className="btn primary" disabled={!prompt.trim() || busy || locked}>{busy ? "Thinking…" : "Plan"}</button>
+          <div className="prompt-tools">
+            {info && (
+              <label className="model-select" title="Model that reads the request and writes the plan">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
+                <select value={backend || ""} onChange={(e) => setBackend(e.target.value)}>
+                  {info.backends.map((b) => <option key={b} value={b}>{BACKEND_SHORT[b] || b}</option>)}
+                </select>
+              </label>
+            )}
+            <span className="prompt-hint">{locked ? "Stop the running job to plan a new one" : "Enter to plan · Shift + Enter for a new line"}</span>
+            <button className={`send ${busy ? "busy" : ""}`} disabled={!canSend} aria-label="Plan" title="Plan">
+              {busy ? <span className="spinner" /> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
+            </button>
+          </div>
         </div>
-        <div className="examples">
-          <span className="sub">Try</span>
-          {(info?.examples || []).map((x) => <button type="button" key={x} disabled={locked} onClick={() => setPrompt(x)}>{x}</button>)}
+        <div className="suggestions">
+          {(info?.examples || []).map((x) => (
+            <button type="button" key={x} disabled={locked} onClick={() => setPrompt(x)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">{suggestIcon(x)}</svg>{x}
+            </button>
+          ))}
         </div>
-        {locked && <p className="sub">A job is running. Stop it or wait for it to finish to plan a new one.</p>}
       </form>
+    </section>
+  );
+}
+
+function RecentRuns({ history, current, onPick }) {
+  if (!history.length) return null;
+  const res = (h) => h.running ? "running" : h.error ? "error" : h.stopped ? "stopped" : h.result
+    ? `${h.result.before.success}/${h.result.before.trials}${h.result.after ? ` → ${h.result.after.success}/${h.result.after.trials}` : ""}` : "–";
+  const ok = (h) => h.result && (h.result.after || h.result.before).success === (h.result.after || h.result.before).trials;
+  return (
+    <section className="recent">
+      <div className="recent-head"><span>Recent runs</span><span className="sub">{history.length}</span></div>
+      <ScrollRow className="recent-strip">
+        {history.slice(0, 12).map((h) => (
+          <button key={h.id} className={`recent-card ${h.id === current ? "on" : ""}`} onClick={() => onPick(h)} aria-pressed={h.id === current}>
+            <span className="recent-prompt">{h.prompt}</span>
+            <span className="recent-meta">
+              <span className="sub">{h.started?.slice(5, 16).replace("-", ".")}</span>
+              <span className={`recent-result ${h.running ? "running" : ok(h) ? "ok" : h.result ? "partial" : ""}`}>{res(h)}</span>
+            </span>
+          </button>
+        ))}
+      </ScrollRow>
     </section>
   );
 }
@@ -251,7 +310,7 @@ function Stepper({ steps }) {
   return <ol className="stepper">{steps.map(([key, text, state]) => <li key={key} className={state}>{text}</li>)}</ol>;
 }
 
-function Tiles({ trials, seeds, runningSeeds, onPick, title }) {
+function Tiles({ trials, seeds, runningSeeds, onPick, title, viewing }) {
   const bySeed = Object.fromEntries(trials.map((t) => [t.seed, t]));
   const k = trials.filter((t) => t.success).length;
   const fails = Object.entries(trials.flatMap((t) => t.labels).reduce((a, l) => ({ ...a, [l]: (a[l] || 0) + 1 }), {}));
@@ -263,7 +322,7 @@ function Tiles({ trials, seeds, runningSeeds, onPick, title }) {
           const t = bySeed[s];
           const cls = t ? (t.success ? "ok" : "fail") : runningSeeds.has(s) ? "running" : "";
           return (
-            <button key={s} className={`tile ${cls}`} disabled={!t} onClick={() => onPick(s)}
+            <button key={s} className={`tile ${cls} ${viewing === s ? "viewing" : ""}`} disabled={!t} onClick={() => onPick(s)}
                     title={t ? (t.success ? "succeeded · click to replay" : `${t.labels.map(label).join(", ")} · click to replay`) : runningSeeds.has(s) ? "running" : "waiting"}>
               {i + 1}
             </button>
@@ -363,38 +422,61 @@ export default function Studio({ open }) {
 
   const refreshHistory = () => studio.jobs().then(setHistory).catch(() => {});
   useEffect(() => {
-    studio.info().then((i) => {
+    // on open: attach the running job, else select the most recent run so the page is never empty
+    Promise.all([studio.info(), studio.jobs().catch(() => [])]).then(([i, h]) => {
       setInfo(i);
       setBackend(i.default_backend);
       setSettings((s) => ({ ...s, workers: i.default_workers }));
-      if (i.running) attach(i.running);
+      setHistory(h);
+      if (i.running) attach(i.running, true);
+      else if (h.length) attach(h[0].id, h[0].running);
     }).catch(() => {});
-    refreshHistory();
   }, []);
 
-  const attach = (id) => setJob({ id, events: [], offset: 0, running: true, meta: null });
+  // running: true only for a job known to be running (just started, or reported by the server); a past run opened
+  // from the list starts as not running, so the live player never picks up its old live files
+  const attach = (id, running = false) => setJob({ id, events: [], offset: 0, running, meta: null });
 
   useEffect(() => {                                        // follow the job's events
     if (!job?.id) return;
     let stop = false;
     (async () => {
-      let offset = 0, running = true;
+      let offset = 0, running = true, failures = 0;
       while (!stop) {
         try {
           const r = await studio.job(job.id, offset);
+          failures = 0;
           offset = r.offset;
           running = r.running;
           if (!stop) setJob((j) => j && j.id === job.id ? { ...j, events: [...j.events, ...r.events], running, meta: r.job || j.meta, logTail: r.log_tail } : j);
-        } catch { running = false; }
+        } catch {
+          // a failed request (server restarting, page reloading) is retried; after 5 in a row stop following
+          if (++failures >= 5) {
+            running = false;
+            if (!stop) setJob((j) => j && j.id === job.id ? { ...j, running: false } : j);
+          }
+        }
         if (!running) break;
-        await sleep(700);
+        await sleep(failures ? 1500 : 700);
       }
       if (!stop) { forget("runs"); forget("skills"); forget("headlines"); forget("progress"); refreshHistory(); }
     })();
     return () => { stop = true; };
   }, [job?.id]);
 
-  const player = useLivePlayer(job?.id, !!job?.running);
+  const nextScene = useRef(null);
+  const player = useLivePlayer(job?.id, !!job?.running, (b) => nextScene.current?.(b));
+
+  // job clock: the last event's time, advanced locally between polls while the job runs
+  const nEvents = job?.events?.length || 0;
+  const lastAt = useRef(Date.now());
+  const [, setSecond] = useState(0);
+  useEffect(() => { lastAt.current = Date.now(); }, [nEvents]);
+  useEffect(() => {
+    if (!job?.running) return;
+    const id = setInterval(() => setSecond((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, [job?.running]);
 
   const doPlan = async () => {
     setJob((j) => (j?.running ? j : null));
@@ -414,7 +496,8 @@ export default function Studio({ open }) {
       const j = await studio.start({ prompt, task: plan.spec.task, program: plan.program?.program,
         program_source: plan.program?.source, n: settings.n, workers: settings.workers, retries: settings.retries,
         auto_fix: settings.autoFix, hard: settings.hard, backend });
-      attach(j.id);
+      attach(j.id, true);
+      refreshHistory();                                    // the new job shows (and is highlighted) in Recent runs
     } catch (e) { setPlan({ ...plan, runError: String(e.message || e) }); }
   };
 
@@ -447,11 +530,21 @@ export default function Studio({ open }) {
   };
 
   const runTrials = trials("run"), rerunTrials = trials("rerun");
-  useEffect(() => {                                        // a finished job opens its most telling scene
+  // a finished job plays its scenes in order, starting with scene 1 of the latest phase (after the fix, if any)
+  const latestPhase = rerunTrials.length ? "rerun" : "run";
+  nextScene.current = (b) => {
+    const ph = b.meta?.run || latestPhase;
+    const done = new Set(trials(ph).map((x) => x.seed));
+    const order = seeds.filter((s) => done.has(s));
+    if (!order.length) return;
+    const i = order.indexOf(b.meta?.seed);
+    pickTile(ph, order[(i + 1) % order.length]);
+  };
+  useEffect(() => {
     if (!job || job.running || player.b || !runTrials.length) return;
-    if (rerunTrials.length) return void pickTile("rerun", (rerunTrials.find((x) => x.success) || rerunTrials[0]).seed);
-    const t = runTrials.find((x) => !x.success && !x.labels.includes("episode_error")) || runTrials[0];
-    pickTile("run", t.seed);
+    const done = new Set(trials(latestPhase).map((x) => x.seed));
+    const first = seeds.find((s) => done.has(s));
+    if (first != null) pickTile(latestPhase, first);
   }, [job?.id, job?.running, runTrials.length, rerunTrials.length]);
 
   const steps = [
@@ -487,6 +580,9 @@ export default function Studio({ open }) {
       <Composer info={info} prompt={prompt} setPrompt={setPrompt} backend={backend} setBackend={setBackend}
                 onSubmit={doPlan} busy={plan?.phase === "spec" || plan?.phase === "program"} locked={!!job?.running} />
 
+      <RecentRuns history={history} current={!plan || job ? job?.id : null}
+                  onPick={(h) => { if (!job?.running) { setPlan(null); attach(h.id, h.running); } }} />
+
       {(plan || job) && <Stepper steps={steps} />}
 
       {!job && plan?.phase === "error" && <p className="bad">{plan.error}</p>}
@@ -520,6 +616,10 @@ export default function Studio({ open }) {
         <>
           <section className={`banner2 ${phase}`}>
             <span className="banner-text">{headline}</span>
+            <Clock label="job time" seconds={(() => {
+              const lastT = ev.reduce((m, e) => Math.max(m, e.t || 0), 0);
+              return job.running ? lastT + (Date.now() - lastAt.current) / 1000 : lastT;
+            })()} />
             <span className={`banner-progress ${progress == null && job.running ? "indeterminate" : ""}`}>
               <span style={{ width: `${100 * (progress ?? (job.running ? 0.3 : 1))}%` }} /></span>
             {job.running ? <button className="btn" onClick={() => studio.stop(job.id)}>Stop</button>
@@ -551,7 +651,8 @@ export default function Studio({ open }) {
               )}
             </div>
             <section className="card">
-              <Tiles title="First run" trials={trials("run")} seeds={seeds} runningSeeds={runningSeeds("run")} onPick={(s) => pickTile("run", s)} />
+              <Tiles title="First run" trials={trials("run")} seeds={seeds} runningSeeds={runningSeeds("run")} onPick={(s) => pickTile("run", s)}
+                     viewing={b?.meta?.run === "run" && !b?.meta?.tag ? b.meta.seed : null} />
               {repairStart && (
                 <div className="tiles-block">
                   <div className="card-head"><h3>{creating ? `Learning: ${nice(repairStart.capability)}` : "Fixing"}</h3>{phase === "repair" && <span className="pulse">working</span>}</div>
@@ -559,7 +660,8 @@ export default function Studio({ open }) {
                 </div>
               )}
               {stageEv("rerun", "start") && (
-                <Tiles title={creating ? "With the new skill" : "After the fix"} trials={trials("rerun")} seeds={seeds} runningSeeds={runningSeeds("rerun")} onPick={(s) => pickTile("rerun", s)} />
+                <Tiles title={creating ? "With the new skill" : "After the fix"} trials={trials("rerun")} seeds={seeds} runningSeeds={runningSeeds("rerun")} onPick={(s) => pickTile("rerun", s)}
+                       viewing={b?.meta?.run === "rerun" && !b?.meta?.tag ? b.meta.seed : null} />
               )}
               {result && <Outcome result={result} open={open} />}
               {job.logTail && <Details label="job log"><Code>{job.logTail}</Code></Details>}
@@ -569,21 +671,6 @@ export default function Studio({ open }) {
         </>
       )}
 
-      {!plan && !job && history.length > 0 && (
-        <section className="card">
-          <div className="card-head"><h3>Recent runs</h3></div>
-          <div className="history">
-            {history.slice(0, 8).map((h) => (
-              <button key={h.id} className="history-row" onClick={() => { setPrompt(h.prompt); attach(h.id); }}>
-                <span className="history-prompt">{h.prompt}</span>
-                <span className="sub">{h.started?.slice(5, 16)}</span>
-                <span className="history-result">{h.running ? "running" : h.error ? "error" : h.stopped ? "stopped" : h.result ?
-                  `${h.result.before.success}/${h.result.before.trials}${h.result.after ? ` → ${h.result.after.success}/${h.result.after.trials}` : ""}` : "–"}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

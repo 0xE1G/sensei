@@ -19,12 +19,12 @@ const ICONS = {
 };
 
 const SECTIONS = [
-  ["Work", [["studio", "Studio", "Tell the robot what to do, watch it run, and let it fix what fails."],
-            ["episodes", "Episodes", "Replay any saved episode in 3D with its plan and every skill call."]]],
-  ["Insight", [["progress", "Progress", "How the system improved: repairs, transfer, diagnosis, measured in simulation."],
-               ["investigator", "Investigator", "Why a step failed: evidence, possible causes, and the one-change test of each."],
-               ["experiments", "Experiments", "Every search and repair, with the candidates tried and the gates they faced."]]],
-  ["Library", [["skills", "Skills", "What the robot knows, where each skill works, and how the library grew."]]],
+  ["Work", [["studio", "Studio", "Describe a task, run it in simulation, and repair what fails."],
+            ["episodes", "Episodes", "Recorded episodes with the plan, skill timeline and robot cameras."]]],
+  ["Insight", [["progress", "Progress", "Repairs, transfer and diagnosis, measured across runs."],
+               ["investigator", "Investigator", "Failure diagnosis with evidence and one-change tests."],
+               ["experiments", "Experiments", "Failure searches, repairs and skill creation, with their gates."]]],
+  ["Library", [["skills", "Skills", "Verified skills, where they work, and how the library changed."]]],
 ];
 const TAB = Object.fromEntries(SECTIONS.flatMap(([, items]) => items.map(([k, title, desc]) => [k, { title, desc }])));
 
@@ -40,32 +40,31 @@ export default function App() {
     if (next.tab) setTab(next.tab);
   };
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="logo">金</span>
-          <div><h1>Kintsugi</h1><p>self-repairing robot skills</p></div>
+    <div className="shell top">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <svg className="logo-mark" viewBox="0 0 32 32" aria-label="Kintsugi">
+              <rect width="32" height="32" rx="9" />
+              <circle cx="16" cy="16" r="8.6" />
+              <path d="M12.2 7.9 L15.4 13.2 L13.3 16.6 L18.4 19.9 L20.4 24.2" />
+            </svg>
+            <h1>KINTSUGI</h1>
+          </div>
+          <nav className="top-nav">
+            {SECTIONS.map(([section, items], si) => (
+              <div key={section} className="nav-group" title={section}>
+                {si > 0 && <span className="nav-sep" aria-hidden="true" />}
+                {items.map(([k, label]) => (
+                  <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)} aria-current={tab === k ? "page" : undefined}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS[k]}</svg>{label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
         </div>
-        <nav className="side-nav">
-          {SECTIONS.map(([section, items]) => (
-            <div key={section} className="nav-section">
-              <div className="nav-label">{section}</div>
-              {items.map(([k, label]) => (
-                <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS[k]}</svg>{label}
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <div className="side-foot" title="Every statement in the app carries one of these labels">
-          <div className="nav-label">Labels</div>
-          <span><i className="dot-label dot-measured" />measured in simulation</span>
-          <span><i className="dot-label dot-hypothesis" />model's hypothesis</span>
-          <span><i className="dot-label dot-confirmed" />confirmed by a test</span>
-          <span><i className="dot-label dot-rejected" />rejected by a test</span>
-        </div>
-      </aside>
+      </header>
       <main className="content">
         <header className="page-head">
           <h2>{TAB[tab].title}</h2>
