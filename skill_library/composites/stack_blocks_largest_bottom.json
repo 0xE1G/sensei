@@ -1,0 +1,42 @@
+{
+  "name": "stack_blocks_largest_bottom",
+  "kind": "composite",
+  "version": 1,
+  "description": "Verified plan program for: Stack the blocks, largest at the bottom.",
+  "signature": [
+    "on:block->block",
+    "on:block->block"
+  ],
+  "program": "blocks = find(kind='block')\nblocks_sorted = sorted(blocks, key=lambda b: b.size, reverse=True)\nfor i in range(1, len(blocks_sorted)):\n    pick(blocks_sorted[i])\n    place(blocks_sorted[i-1])",
+  "evidence": {
+    "rate": 0.969,
+    "success": 31,
+    "trials": 32,
+    "heldout": {
+      "success": 15,
+      "trials": 16
+    },
+    "fixed_plan_rate": 0.0,
+    "p_better_than_fixed": 0.0
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "plan_program",
+      "run_id": "20261031-032054_verify_program",
+      "date": "2026-10-31",
+      "written_by": {
+        "job": "plan_program",
+        "backend": "claude_cli",
+        "model": "sonnet",
+        "prompt_version": "2",
+        "input_hash": "4eaef34fe014",
+        "cached": false,
+        "repairs": 0,
+        "latency_s": 5.34
+      },
+      "prompt": "Stack the blocks, largest at the bottom."
+    }
+  ],
+  "verified_spec": "355daf5284d3"
+}

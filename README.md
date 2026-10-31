@@ -22,6 +22,7 @@ python scripts/run_task.py bowl_on_tray -n 8 --grasps top_grasp # expected to FA
 python scripts/run_task.py sort_with_bowl -n 8 --oracle         # the demo task; --oracle checks each scene was solvable
 python scripts/prompt_task.py "Put the bowl on the tray." -n 4  # typed request -> task spec -> run
 python scripts/prompt_task.py "..." --backend claude_cli        # same, with Claude as the reasoning stand-in (run `claude` /login once)
+python scripts/prompt_task.py "Stack the blocks, largest at the bottom." --program --compare -n 8   # model-written plan program vs fixed plan
 python scripts/failure_search.py --from-seed                    # where does the library fail? random vs Optuna vs model, capability map
 python scripts/investigate.py --from-search runs/<id>_failsearch/report.json --library current  # why? tested causes + ledger
 python scripts/transfer.py mug --backend claude_cli               # unseen object type: library retrieval + verification vs from scratch

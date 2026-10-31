@@ -13,6 +13,15 @@ held-out tests, and reuses them on objects it has never seen.
 Nothing is trained. Every improvement is a skill, parameter or plan change found by search in simulation and verified
 there. Laptop CPU plus Meta model API calls. Say "builds and verifies its own skill library", never "learns".
 
+**Platform vision: reuse what is known, fix what fails, create and verify what is missing.** For a known task the
+library's verified skills run as they are (a new mug needed 10 verification trials). When a step fails, the system
+finds out why and repairs it. When no skill can do what a task needs, the model proposes a new parameterized motion
+(a primitive) and simulation tunes and verifies it before it is ever trusted. The model is the engineer, not the
+hands: it writes task specs, plans, diagnoses and proposals; search in simulation finds the numbers; deterministic
+checks and statistical gates decide what is true. The honest limit: anything that (1) can be simulated faithfully,
+(2) has a success check code can evaluate, (3) can be expressed through the motion API, and (4) has a search space
+small enough to explore in hundreds to a few thousand trials.
+
 **The demo story:** "Sort the blocks and the bowl onto the trays of the same colour (don't knock over the bottle)."
 The blocks go on their trays, the bowl fails, the system shows why, discovers a rim grasp, proves it on bowls it never
 tuned on, then handles an unseen cup after a few verification trials.
@@ -26,18 +35,21 @@ skill, and every claim is a measurement with a sample count and an interval:
 3. A new object reaches 80% success in N trials when it starts from the library, against M trials from scratch.
 4. Supporting: a failure search finds the weak spots in K trials (vs random sampling), and Spark-guided repair search
    beats Optuna alone at equal budget (or honestly does not).
+5. Stretch: the system created a skill it did not have (a model-written push primitive, tuned and gated in
+   simulation) and used it in a plan.
 
 A modest or null result is still a valid result, because it is measured.
 
-## Where we are (2026-10-30)
+## Where we are (2026-10-31)
 
-Built and tested (details in CLAUDE.md): scene builder from parametric templates, cameras and depth perception with
-shape descriptors, mink motion, skills with checks, executor, failure labeler, parallel runner, frozen splits for bowls
-and cups, the demo task `sort_with_bowl`, and the repair loop (`scripts/explore.py`): failure cluster, geometric grasp
-sampler, IK reach filter, families, success map, Optuna, three gates, promotion with lineage. Starting from the seed
-library the loop discovers `rim_pinch` from the demo failure (bowl 0/24 to 24/24, held-out 16/16 vs 0/16).
+Built and tested (numbers and run ids in CLAUDE.md): templates (incl. bar and mug), perception with principal axes,
+the repair loop (explorer over two primitives, routing changes, parameter patches, gates with paired tests), oracle,
+model layer (rule / Claude / Spark backends), failure search with capability map, investigator with one-change
+replays and an evidence ledger, constraints (bottle), transfer (mug: 10 vs 924 trials), and plan programs (stacking:
+program 8/8 vs fixed plan 0/8). Smoke test 18 checks.
 
-Not built yet: oracle, failure search, investigator, retrieval and transfer, model layer, constraints, web app.
+Not built yet: program verification (composite cards), model-written primitives, push, recovery inside a run, web
+app, Spark/SAM switch-over, unseen-object benchmark, test-split run.
 
 ## Objects: templates that keep growing
 
@@ -78,10 +90,11 @@ the action set and what a repair may change. These close the gaps without any tr
 
 | Improvement | What changes | Effort |
 | --- | --- | --- |
-| **Richer perception** | descriptor adds principal axes, long/short extents, elongation, flat/thin, later handle detection; router shape groups add "long" | ~0.5 day |
-| **General grasp sampler** | a second search primitive placed in the object's own principal frame (offset along each axis, closing angle relative to the long axis, depth, tilt), so oriented and irregular shapes get grasps, not only round and boxy ones | ~1 day |
-| **Repairs beyond grasps** | the explorer's patch space adds lift and place parameters (grip force, transport speed, release height), then push and re-grasp; fixes failures after the grasp (thin cylinders tip at release) | 1-1.5 days |
-| **Plans as programs** | general task logic (see below) | 1.5-2 days |
+| **Richer perception** (done) | descriptor adds principal axes, long/short extents, elongation, flat/thin, later handle detection; router shape groups add "long" | ~0.5 day |
+| **General grasp sampler** (done: axis_pinch) | a second search primitive placed in the object's own principal frame (offset along each axis, closing angle relative to the long axis, depth, tilt), so oriented and irregular shapes get grasps, not only round and boxy ones | ~1 day |
+| **Repairs beyond grasps** (done: parameter patches) | the explorer's patch space adds lift and place parameters (grip force, transport speed, release height), then push and re-grasp; fixes failures after the grasp (thin cylinders tip at release) | 1-1.5 days |
+| **Plans as programs** (done) | general task logic (see below) | 1.5-2 days |
+| **Model-written primitives** | the model proposes a missing motion (push; later tilt-while-holding for pouring), simulation tunes and gates it | 1.5-2 days |
 | **Unseen-object benchmark** | a frozen set of ~20 objects never used in development (new templates and parameter corners, optional ProjectSim meshes): success before vs after ONE automatic search-and-repair cycle, no object-specific code | ~0.5 day once the above exist |
 
 The benchmark is the answer to "is it general?": "on N objects it had never seen, success went from X% to Y% after
@@ -157,30 +170,66 @@ Success, constraint checks and failure labels are deterministic code, never the 
 
 ### Plans as programs (Code as Policies)
 
-What exists now is *not* code-as-policies: the planner emits a fixed JSON list of skill calls per subtask, and the skills
-are hand-written Python functions whose parameters search can tune. Code as Policies means the **model writes the plan
-as a short program** against a perception and skill API, with loops, conditionals and arithmetic:
+**Built.** The model writes the plan as a short program against a perception and skill API, with loops, conditionals
+and arithmetic (`kintsugi/program.py`, job `plan_program`):
 
 ```python
-blocks = sorted(find(kind="block"), key=lambda o: o.size, reverse=True)
-base = find_one(kind="tray", color="blue")
-for b in blocks:
-    grasp = choose_grasp(b)                  # router: best verified card for this shape group
-    if not pick(b, grasp):
-        pick(b, next_best_grasp(b))          # recovery written into the plan
-    place_on(b, base if b is blocks[0] else last_placed())
+blocks = sorted(find(kind="block"), key=lambda b: b.size, reverse=True)
+for lower, upper in zip(blocks, blocks[1:]):
+    if pick(upper) or pick(upper, grasp=next_best_grasp(upper)):
+        place(lower)
 ```
 
-Design:
+- A restricted interpreter runs it (AST whitelist, known names only, line and skill-call budgets). `pick` and `place`
+  use the same Episode step methods as the fixed plan, so every skill, check, label and piece of evidence is shared.
+- The API exposes perception (`find`, sizes, positions, `left_of`, `distance`) and verified skills, never motors.
+- Result: stacking by size, program 8/8 vs fixed plan 0/8; demo task equal (6/8 each).
 
-- A restricted interpreter runs it: the AST is checked against a whitelist (our API, numbers, loops with a bound, no
-  imports, no attribute access outside API objects), and every API call is recorded, so the trace is the same
-  skill-call record the executor already writes. The JSON plan stays as the validated fallback.
-- The API exposes perception queries (`find`, `size`, `left_of`, `distance`) and skills, never motor commands.
-- Unlocks tasks the JSON planner cannot express: ordering by size, spatial relations ("left of the bowl"), counting,
-  conditional recovery. Words-to-numbers edits ("a bit higher") map to parameter overrides.
-- **Composite skills are programs too** (Voyager / hierarchical code generation): a repeated successful sequence, or a
-  model-proposed helper (`clear_path_then_pick`), is stored as a program card and goes through the same gates.
+**Plans vs skills (who writes what).** The model writes *plans* (what to do, in which order). It does not write the
+skills that do it: those are found by search and trusted only through the gates. This split is why programs work.
+
+| Layer | Written by | Trusted through |
+| --- | --- | --- |
+| Motion (move_to, open, close, rotate) | humans, once | fixed infrastructure |
+| Primitives (parameterized motions: feature_pinch, axis_pinch, later push) | humans; next: the model (proposals) | search + gates before any card uses them |
+| Skill cards, patches, routing | the explorer (search in simulation) | gates: paired tests, held-out, regression |
+| Plans / programs | the model (or the rule stand-in) | static check; per-run goal checks; next: program verification |
+
+**The fixed plan stays** as (1) the engine for bulk experiments (failure search, explorer and investigator run
+thousands of single-object trials; a model call per scene would burn credits), (2) the fallback when the model is
+unavailable or its program is rejected, and (3) the baseline programs are compared with. Later simplification: make
+the rule program stand-in the default planner and keep the fixed plan only for experiments and comparison.
+
+**Next: program verification.** A program is safety-checked and every run is scored, but it is not yet *trusted*
+for a kind of task. A program that succeeds repeatedly (N seeds, held-out scenes) is saved as a **composite card**
+(Voyager-style library entry, e.g. `stack_by_size`, `clear_then_pick`) with lineage, gated like any skill, and
+retrieved for similar requests instead of asking the model again.
+
+### Creating missing skills: model-written primitives
+
+Composition only helps when the needed motion already exists in some primitive. When no skill can do what a task
+needs (no skill rotates a held object, none pushes), the model proposes one:
+
+1. **Gap:** the task-spec or plan job reports a missing capability, or the failure search / investigator finds
+   failures no existing primitive, card or patch can fix (e.g. a flat plate that no grasp fits).
+2. **Proposal:** the model writes a primitive: Python against the motion API only (`move_to`, `open`, `close`, wrist
+   rotation, perception of the target), a list of parameters with ranges, and an observable check.
+3. **Safety:** the same kind of AST whitelist and budgets as plan programs; the code runs only inside simulation.
+4. **Search:** the explorer treats it like `feature_pinch` / `axis_pinch`: samples its parameters, simulates candidates,
+   builds a success map, tunes with Optuna.
+5. **Gates and lineage:** promoted only through the usual gates; the card records `source: model-written primitive`,
+   the proposal, and the investigator's evidence that motivated it.
+
+The model proposes the *shape* of a motion; simulation finds the *numbers* and decides whether it works. Model-written
+skills are never trusted directly (plausible code that works sometimes is exactly what the gates exist to catch).
+
+**Hackathon demo: push.** Needs no new physics: a plate no grasp fits from the table, or an item out of reach. The
+model proposes `push` (approach side, contact height, distance, speed), search tunes it, gates verify it, and a plan
+program combines push-to-edge-then-grasp. **Pouring is the post-hackathon example of the same mechanism:** it needs one
+new motion type (tilt while holding: height above the target, tilt axis, max angle, angular speed, hold time), a grasp
+that holds when tilted (search picks it), a particle stand-in for liquid (MuJoCo has no fluids), and code-checkable
+success (fraction of particles in the target, spill). Everything else (grasp choice, search, investigator, gates,
+programs) carries over unchanged. Liquids stay out of scope for the hackathon.
 
 ## Skills
 
@@ -196,14 +245,16 @@ trial (the router reads it). Grasp variants found by the explorer reuse the `fea
 
 | Skill | Status | Purpose |
 | --- | --- | --- |
-| top_grasp, side_wrap | seed | solid objects |
+| top_grasp, side_wrap | seed | solid objects; top_grasp has a `clear_side` switch (keep the hand clear of neighbours) |
 | rim_pinch | discovered | hollow objects with a rim (bowl, cup, mug) |
-| lift, place_in / drop_in | seed | transport, containers |
-| place_on / stack | next | stacking tasks; check: still standing after 2 s |
-| push | next | move an object into reach or out of the way; base of "push closer" recovery and push-to-edge |
-| put_down_and_regrasp | next | recovery when the first grasp pose is poor |
-| handle_grasp | with the mug | grasp on the handle feature (an explorer target, not hand-written if avoidable) |
-| push_to_edge_then_grasp | later | composite for flat objects |
+| centre_grasp | discovered (v2) | tall narrow solids: grip 17 mm below the top |
+| axis_centre_across | discovered | long objects (bars): close across the long axis |
+| patches | discovered | place_in.clearance 0 for tall narrow solids; clear_side for short solids near obstacles |
+| lift, place_in / drop_in | seed | transport, containers; place on another object = stacking (done via programs) |
+| push | next, as the model-written primitive demo | move an object to the table edge / into reach; push-to-edge-then-grasp |
+| put_down_and_regrasp | later | recovery when the first grasp pose is poor |
+| handle_grasp | later | grasp on the mug's handle feature (an explorer target) |
+| pour (tilt while holding) | post-hackathon | the same model-written-primitive mechanism; needs a particle liquid stand-in |
 
 **Recovery inside a run:** when a check fails, try the next-best verified variant or a bounded recovery (re-grasp, lower
 grasp point, push closer) instead of stopping. Report task success with and without recovery.
@@ -298,7 +349,10 @@ Finish each thin path before adding breadth; keep the smoke test green and under
 | 5 | done: **Investigator**: ledger, diagnosis job, one-change replays | one hypothesis confirmed and one rejected from saved logs; diagnosis accuracy on 20+ failures |
 | 6 | done: **Constraints + bottle**, non-grasp repair (clear-side patch) | "don't knock over the bottle" fails repeatably (20-80%) and a repair passes the gates |
 | 7 | done: **Retrieval, router, transfer** (mug with handle: 10 vs 924 trials) | transfer vs scratch numbers |
-| 8 | **Plan programs** (restricted interpreter, plan job) + push + recovery | a stacking-by-size task runs from a prompt; recovery numbers |
+| 8 | done: **Plan programs** (restricted interpreter, plan job, stacking) | a stacking-by-size task runs from a prompt |
+| 8b | done: **Program verification**: repeated successful programs become composite cards, gated, retrieved for similar requests | a composite card promoted with lineage and reused without a new model call |
+| 8c | **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
+| 8d | Recovery inside a run (next-best verified variant / bounded recovery) | task success with vs without recovery |
 | 9 | **Web app** over saved files | full demo replays offline |
 | 10 | **Spark + SAM switch-over** when the key arrives; re-run reported experiments; perception gap on ~50 episodes | headline numbers produced with Meta models |
 | 10b | **Unseen-object benchmark** (frozen set, one automatic search-and-repair cycle) | before/after on never-seen objects |
@@ -315,11 +369,11 @@ demo.
 | 1 | Learn from a human video: SAM tracks hand and object, MediaPipe pinch vs wrap, contact segments reach/grasp/lift/move/release, the model maps them to a plan program, sim retries | "watches once, then does it" | core loop done |
 | 2 | Automatic curriculum: after a fix, generate harder variants (thinner, slipperier, tighter, more clutter) and show where the skill stops working | difficulty ladder | gates work |
 | 3 | Self-proposed tasks (RoboGen/GenSim style): the model proposes tasks from template affordances, the oracle keeps solvable ones, they grow the regression set | breadth without hand-writing tasks | model layer + oracle |
-| 4 | Composite skill mining from repeated successful sequences | new skills from the library's own history | plan programs |
+| 4 | Composite skill mining from repeated successful sequences (now core: step 8b, program verification) | new skills from the library's own history | plan programs |
 | 5 | Keypoint constraint placement (ReKep-style: the model writes constraints on perceived keypoints, an optimizer solves the pose): "handle facing left", "rim up" | richer goals, no training | mug template |
 | 6 | Realistic mesh objects (ProjectSim) as a final test set | realism | transfer works |
 
-Out of scope: voice, visual randomization, any trained policy (ACT, VLA, RL), self-hosted models unless rate-limited,
+Out of scope for the hackathon: liquids and pouring (the mechanism is planned, the particle simulation is not), voice, visual randomization, any trained policy (ACT, VLA, RL), self-hosted models unless rate-limited,
 real robot (future work only).
 
 ## The 3-minute demo
@@ -332,8 +386,11 @@ real robot (future work only).
 4. **1:10 Repair.** Candidates around the rim, the success map fills in live, families compete, gates run. Promotion diff
    with before/after, regression and held-out numbers.
 5. **1:50 Transfer.** An unseen mug: "rim, like the bowl"; a few verification trials; success. Skill graph shows the new node.
-6. **2:20 Video (if built).**
-7. **2:45 Close.** The headline numbers.
+6. **2:10 A skill it did not have (if built).** "Put the plate on the tray": no grasp fits a flat plate on the table;
+   the model proposes a push primitive, search tunes it, the gates pass, and the plan program pushes the plate to the
+   edge and grasps it. Stacking by size shows the model writing the plan as code.
+7. **2:20 Video (if built).**
+8. **2:45 Close.** The headline numbers.
 
 Replays saved runs. At most one short live run, only after three clean rehearsals. Backup video recorded.
 

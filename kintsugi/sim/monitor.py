@@ -63,7 +63,8 @@ class Monitor:
         return math.degrees(math.acos(np.clip(R[2, 2], -1, 1))) < tol_deg
 
     def inside(self, oid, target) -> bool:
-        """True if object `oid` rests in/on `target` (bowl, cup, bin, tray, zone)."""
+        """True if object `oid` rests in/on `target` (bowl, cup, mug, bin, tray, zone, or on top of a block,
+        bar or cylinder: stacking)."""
         tm = self.scene.objects[target]
         p = self.pos(oid)
         tp = self.pos(target)
@@ -75,6 +76,11 @@ class Monitor:
             return r < tm["rim_radius"] and tp[2] - 0.01 < bottom < tp[2] + tm["rim_z"] + 0.5 * om["height"]
         R = self.scene.data.xmat[self.obj_body[target]].reshape(3, 3)
         local = R.T @ (p - tp)
+        if tm["template"] in ("block", "bar", "cylinder"):
+            # Stacked: centred over the target's top face and resting on it.
+            top_t = tp[2] + tm.get("bottom_offset", 0) + tm["height"]
+            half = (tm.get("extent_major", tm["width"]) / 2, tm.get("extent_minor", tm["width"]) / 2)
+            return abs(local[0]) < half[0] and abs(local[1]) < half[1] and abs(bottom - top_t) < 0.015
         return (abs(local[0]) < tm["half_x"] and abs(local[1]) < tm["half_y"]
                 and tp[2] - 0.01 < bottom < tp[2] + tm["rim_z"] + 0.03)
 

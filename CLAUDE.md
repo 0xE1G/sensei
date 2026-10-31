@@ -27,7 +27,9 @@ Headline numbers: diagnosis accuracy vs simulator labels; success before/after r
 - **SAM is called only at key moments** (~3-5 per episode): tag objects at start, optionally before a grasp, after a place, on failure frames. Between calls, track by depth clusters. Bulk exploration trials use simulator masks (`mode="sim"`); real SAM on demo episodes + a measured sample (~50) to report the perception gap.
 - **Meta models**: Muse Spark = task spec / clarifying question / refusal, plan programs over the skill API, failure diagnosis, grasp-family proposals, patch proposals, failure-search proposals, retrieval re-ranking. SAM 3 = masks. **The Meta key arrives only at the end (limited credits).** All model calls go through one client (`kintsugi/agents/llm.py`, planned) with backends `rule` (deterministic stand-ins, tests), `claude_cli` (dev reasoning via `claude -p --output-format json`, installed and logged in on the laptop) and `spark` (enabled by `KINTSUGI_LLM=spark` + key). Same prompts, schemas and validators for every backend; switching = config only. Cache every call by hash of (job, prompt version, input, backend); store backend + model id in every record and never report stand-in results as Spark results. Call models per proposal, never per trial.
 - **Many object types later**: nothing downstream may depend on a template name. Each template declares parameters + ranges, the features perception can find (rim, handle, top face, body, flat...), true keypoints (privileged, for oracle/labeler only), supported goal predicates and split bands. A new feature with no skill is an explorer case, not a hand-written special case.
-- **Plans become programs (Code as Policies)**: the current planner emits a fixed JSON skill list; the target is a model-written short Python program over a perception + skill API, run by a restricted AST-whitelisted interpreter that records the same skill trace. JSON plan stays as the fallback.
+- **Plans are programs (Code as Policies, built)**: the model writes a short Python program over a perception + skill API, run by a restricted AST-whitelisted interpreter on the same Episode step methods as the fixed plan. The fixed plan stays as the bulk-experiment engine (no model call per scene), the fallback, and the baseline.
+- **Who writes what (do not blur)**: the model writes task specs, plans/programs, diagnoses and proposals, and may PROPOSE new primitives (parameterized motion code + ranges + check). It never writes trusted skills directly: simulation search finds the numbers and the gates decide. Composition helps only when the motion exists in some primitive; a missing motion (push; later tilt-while-holding for pouring) is a model-written primitive, searched and gated like feature_pinch/axis_pinch.
+- **Platform vision**: reuse what is known, fix what fails, create and verify what is missing; limited by simulation fidelity, code-checkable success, the motion API and search cost. Liquids/pouring out of scope for the hackathon (mechanism planned, particle simulation not).
 - **Web app**: React + Vite + Three.js (react-three-fiber). Physics never runs in the browser: it replays saved pose logs (`media/*_poses.json.gz`, every body pose at 30 fps + static geom description; Panda meshes from Menagerie). MP4 as fallback. Four panels: Task & scene / Run replay with skill trace (failed step red) / Failure investigator (measured vs hypothesis vs confirmed vs rejected) / Results & skill lineage tree. FastAPI backend serving saved files.
 - **Run settings**: parallel workers default = CPU cores - 1; JSON record for every trial; poses + MP4 for failures and 1 in N successes (flags).
 - **Out of scope**: voice, lighting/texture randomization, any trained policy (ACT, VLA), real robot.
@@ -219,6 +221,22 @@ round started by the search (see status).
    was found"; verification 9/10 -> trusted; from scratch: promoted after 924 trials (580 search).
    HEADLINE: 10 trials with the library vs 580 search trials (924 total) from scratch
    (runs/20261031-022103_transfer_mug).
+4e. **Plan programs (Code as Policies) done**: `kintsugi/executor.py` is now an `Episode` with step methods
+   (begin / grasp / lift / place / finish); the fixed plan (`run_plan`) and programs share every skill call, check,
+   label and evidence. `kintsugi/program.py`: API find / find_one (Obj: id kind color role x y size height top
+   hollow long), pick(obj, grasp=None) (router + patches), place(target) (containers, trays, or another object =
+   stacking; shared-container spots planned from the goals like the planner), place_at(x, y), next_best_grasp,
+   holding, distance / left_of / right_of / in_front_of / behind, say. Safety: AST whitelist + known-name check
+   (`check_program`, also the job validator), line budget 50k, 40 pick/place calls; unattempted goals recorded as
+   `not_attempted`. `run_episode(program=...)` or task["program"]; records carry program, program_log,
+   program_error. Job `plan_program` (prompt v1; rule stand-in = one pick/place per goal, bases first, one retry).
+   Stacking: monitor "on" a block/bar/cylinder (centred over its top face, resting on it); task `stack_by_size`;
+   task_spec validator allows stacking (bottom of a stack has no goal; prompt v3). The oracle got the stand-in
+   program as a last attempt (ordered tasks were "unsolvable" before).
+   `prompt_task.py "<request>" --program [--compare]`. Results: "Stack the blocks, largest at the bottom": fixed plan
+   0/8 (distance order + targets perceived only at the start), program 8/8 with both the rule stand-in and Claude
+   (Claude wrote spec + program, no repairs). Demo task with the bottle: Claude program 6/8 = fixed plan 6/8 (after
+   fixing shared-tray spots: first version put the bowl on the block, 0/8).
    Verification search after the patch (runs/20261031-013441_failsearch): cylinder/centre_grasp 24% -> 5.8%;
    valid failures per 100 random / Optuna / model 5.0 / 6.2 / 10.6. Largest remaining cluster: block/top_grasp
    collision 23% (large blocks; the investigator's "too wide" was rejected, cause still unknown); rare rim_pinch,
@@ -232,15 +250,31 @@ round started by the search (see status).
    Verification search (runs/20261031-014357_failsearch): block cluster gone; valid failures per 100 random /
    Optuna / model 3.8 / 5.6 / 5.0. Trend over the rounds (Optuna): seed 90.6 -> bowl repair 60.0 -> cups+tall
    cylinders 18.8 -> thin-cylinder patch 6.2 -> perception fix 5.6. Remaining: cylinder/centre_grasp drops 9%,
-   short cylinders 3.5%, rare rim_pinch/ball cases.: evidence ledger, diagnosis job, one-factor counterfactual replays, diagnosis accuracy vs labels.
-5. **Constraints + bottle template**: "don't knock over the bottle"; non-grasp repairs (approach side, order, push).
-6. **Retrieval, router table (vs hindsight oracle), transfer**: cup, then mug with handle (new feature). rim_pinch
-   already gets cups 16/16 untuned, so compare verification trials against a from-scratch exploration.
-7. **Plan programs** (restricted interpreter) + push + place_on/stack + recovery inside a run.
-8. **Web app** over saved files (task & scene, replay, investigator, experiments monitor + capability map, results with
-   promotion diff, skill graph, export).
+   short cylinders 3.5%, rare rim_pinch/ball cases.
+
+4f. **Program verification done** (`kintsugi/composites.py`): composite cards in `skill_library/composites/` (kind
+   composite: signature = goal structure by object kind incl. constraints, program, evidence, lineage, verified_spec
+   hash; history/ keeps old versions). `verify_program`: program AND fixed plan on the same 32 fresh scenes (train
+   seeds 500+, dev 100500+); pass = >= 80% overall and on held-out, and not significantly worse than the fixed plan
+   (reversed McNemar). Reuse = retrieve then verify: `find_composite` by signature + hard-coded ids present; if the
+   task spec differs from the verified one, `quick_check` (4 fresh scenes, >= 3) before reuse, else the model writes
+   a new program. Plan-program prompt v2 prefers find(kind/colour/properties) over ids. `prompt_task.py --program
+   [--verify] [--fresh]`; records carry `program_source` (model meta or composite name/version).
+   Results: Claude's id-free stacking program verified 31/32 (held-out 15/16) vs fixed plan 0/32 -> composite
+   `stack_blocks_largest_bottom` v1 (runs/20261031-032054_verify_program); "Build a tower ... biggest at the bottom"
+   -> quick check 4/4 -> reused, no plan model call, 4/4; "smallest at the bottom" (same signature, opposite goals)
+   -> quick check 0/4 -> rejected -> Claude wrote a new program, 4/4.
+
+**Remaining, in order** (plan build order 8c onwards):
+6. **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->
+   model proposes a primitive (motion-API code + parameter ranges + check) -> AST sandbox -> explorer search -> gates
+   -> card `source: model-written primitive`; plan program push-to-edge-then-grasp.
+7. Recovery inside a run (8d).
+8. **Web app** over saved files (task & scene with program, replay, investigator ledger, experiments monitor +
+   capability map, results with promotion diff and gate p-values, skill graph / lineage, export).
 9. **Spark + SAM switch-over**, re-run reported experiments on Meta models, perception gap on ~50 episodes.
-10. Test split once, freeze numbers, demo video. Optional: video imitation, curriculum, self-proposed tasks.
+10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
+   primitive + particle liquid), video imitation, curriculum, self-proposed tasks.
 
 ## How to run
 ```

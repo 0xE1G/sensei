@@ -20,6 +20,8 @@ from kintsugi.agents.llm import ModelClient  # noqa: E402
 from kintsugi.executor import run_episode  # noqa: E402
 from kintsugi.investigate import Investigator  # noqa: E402
 from kintsugi.oracle import run_oracle  # noqa: E402
+from kintsugi.composites import applicable, signature  # noqa: E402
+from kintsugi.program import check_program  # noqa: E402
 from kintsugi.skills.library import seed_library  # noqa: E402
 from kintsugi.tasks.specs import probe  # noqa: E402
 from kintsugi.perception.camera import Camera  # noqa: E402
@@ -115,6 +117,21 @@ def main():
                                                       {"card": "side_wrap", "description": "side grasp", "requires": {},
                                                        "evidence": {}, "found_on": "seed"}]}).output
     results.append(check("retrieval (rule backend)", ret["choice"] == "rim_pinch", ret["explanation"]))
+
+    # Plan programs: the static check refuses imports; the stand-in program stacks three blocks.
+    bad = check_program("import os\nos.remove('x')")
+    stack = make_task("stack_by_size", seed=0)
+    prog = client.complete("plan_program", {"prompt": stack["prompt"], "task": stack}).output["program"]
+    rec_p, _ = run_episode(stack, seed=0, program=prog)
+    results.append(check("plan program (rule backend)", bool(bad) and rec_p["success"],
+                         f"import refused: {bool(bad)}, stack: {rec_p['success']} {rec_p.get('program_error')}"))
+
+    # Composite cards: signature by goal structure; a program with ids applies only where those ids exist.
+    sig = signature(stack)
+    card = {"signature": sig, "program": 'pick(find_one(id="block_small"))\nplace(find_one(id="block_xyz"))'}
+    results.append(check("composite signature/applicability",
+                         sig == ["on:block->block"] * 2 and applicable({**card, "program": prog}, stack)
+                         and not applicable(card, stack), str(sig)))
 
     # Investigator on the rule backend: a tall cylinder fails with top_grasp; the shallow-grasp cause is confirmed.
     spec = probe(7, {"template": "cylinder", "params": {"radius": 0.025, "height": 0.14}, "pos": [0.5, 0.1], "yaw": 0.0})

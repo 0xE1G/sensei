@@ -169,6 +169,21 @@ def probe(seed=0, scenario=None, region=None) -> dict:
     return task
 
 
+def stack_by_size(seed=0) -> dict:
+    """Three blocks of clearly different sizes, stacked largest at the bottom. Order matters: the fixed planner
+    places items in distance order, so it can bury a block it still has to move."""
+    rng = np.random.default_rng(seed)
+    sizes = {"block_large": float(rng.uniform(0.058, 0.064)), "block_medium": float(rng.uniform(0.046, 0.050)),
+             "block_small": float(rng.uniform(0.034, 0.038))}
+    colors = {"block_large": "blue", "block_medium": "green", "block_small": "red"}
+    objs = [{"id": i, "template": "block", "role": "item", "params": {"size": s, "color": colors[i]}}
+            for i, s in sizes.items()]
+    goal = [{"pred": "on", "obj": "block_medium", "target": "block_large"},
+            {"pred": "on", "obj": "block_small", "target": "block_medium"}]
+    return {"name": "stack_by_size", "prompt": "Stack the blocks, largest at the bottom.", "objects": objs,
+            "goal": goal, "constraints": []}
+
+
 def isolate(task: dict, obj: str) -> dict:
     """The sub-task of one item: the same object (same parameters), its target, and the obstacles the task's
     constraints protect (they are part of the step's difficulty); other items are removed.
@@ -185,7 +200,7 @@ def isolate(task: dict, obj: str) -> dict:
 
 TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bowl_on_tray": bowl_on_tray,
          "cup_on_tray": cup_on_tray, "single_block": single_block, "sort_with_bowl": sort_with_bowl,
-         "probe": probe}
+         "probe": probe, "stack_by_size": stack_by_size}
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:

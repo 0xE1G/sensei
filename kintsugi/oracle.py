@@ -33,10 +33,15 @@ def run_oracle(task: dict, seed: int, perturb=None) -> dict:
         [([g] + [h for h in prefs if h != g], None) for g in prefs[1:]] + [(None, {"grasp_skill": "axis_pinch"})] +         [(None, {"top_grasp": {"clear_side": 1}})]      # keeps the hand away from obstacles ("don't knock it over")
     lib = {**lib, **load_cards(LIB_DIR / "primitives")}
     out = {"success": False, "subtask_ok": {}, "skills": {}, "labels": [], "attempts": 0, "wall_time_s": 0.0}
+    # Last resort for tasks where order matters (stacking): the stand-in plan program, bases placed first.
+    from .agents.jobs.plan_program import rule as rule_program
+    attempts += [(None, {"program": rule_program({"task": task})["program"]})]
     for allowed, overrides in attempts:
+        program = (overrides or {}).pop("program", None) if overrides and "program" in overrides else None
         try:
             rec, _ = run_episode(task, seed=seed, perception_mode="ground_truth", library=lib, perturb=perturb,
-                                 allowed_grasps=allowed, overrides=overrides, performance={}, patches={})
+                                 allowed_grasps=allowed, overrides=overrides or None, performance={}, patches={},
+                                 program=program or task.get("program"))
         except Exception as e:                   # an unbuildable scene is unsolvable, not a crash
             return {**out, "error": f"{type(e).__name__}: {e}"}
         out["attempts"] += 1

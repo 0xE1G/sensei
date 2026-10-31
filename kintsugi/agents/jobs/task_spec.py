@@ -8,6 +8,7 @@ from ..llm import Job, load_prompt, register
 
 CONTAINERS_INSIDE = {"bowl", "cup", "bin"}
 SURFACES_ON = {"tray", "zone"}
+STACKABLE = {"block", "bar", "cylinder"}      # "on" another object = stacking
 CONSTRAINTS = ("not_disturbed", "stays_upright")
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 
@@ -95,15 +96,17 @@ def validate(out, inputs) -> list[str]:
             tt = by_id[g["target"]]["template"]
             if g["pred"] == "inside" and tt not in CONTAINERS_INSIDE:
                 errs.append(f"'inside' needs a bowl, cup or bin as target, not {tt} ({g['target']}); use 'on' for trays and zones")
-            if g["pred"] == "on" and tt not in SURFACES_ON | CONTAINERS_INSIDE:
-                errs.append(f"'on' needs a tray or zone as target, not {tt} ({g['target']})")
+            if g["pred"] == "on" and tt not in SURFACES_ON | CONTAINERS_INSIDE | STACKABLE:
+                errs.append(f"'on' needs a tray, zone, or a block/bar/cylinder to stack on, not {tt} ({g['target']})")
             if by_id[g["obj"]].get("role", "item") != "item":
                 errs.append(f"goal object '{g['obj']}' must have role item")
         goal_objs.append(g["obj"])
     items = [o["id"] for o in t["objects"] if o.get("role", "item") == "item"]
+    stack_bases = {g["target"] for g in t["goal"]}
     for i in items:
-        if goal_objs.count(i) != 1:
-            errs.append(f"item '{i}' must have exactly one goal (has {goal_objs.count(i)})")
+        n = goal_objs.count(i)
+        if n > 1 or (n == 0 and i not in stack_bases):
+            errs.append(f"item '{i}' must have exactly one goal (has {n}); only the bottom of a stack may have none")
     if not t["goal"]:
         errs.append("a task needs at least one goal")
     for c in t.get("constraints", []):
@@ -146,7 +149,9 @@ def rule(inputs) -> dict:
         if re.search(pat, p):
             return {"status": "refuse", "reason": reason}
     has = lambda *ws: all(re.search(rf"\b{w}", p) for w in ws)
-    if has("sort") and has("bowl") and has("tray"):
+    if has("stack") and has("block"):
+        task = specs.stack_by_size(seed=0)
+    elif has("sort") and has("bowl") and has("tray"):
         task = specs.sort_with_bowl(seed=0)
     elif has("sort") and has("block"):
         task = specs.sort_by_color(seed=0)
