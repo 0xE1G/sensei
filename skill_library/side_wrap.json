@@ -1,0 +1,51 @@
+{
+  "name": "side_wrap",
+  "version": 1,
+  "kind": "grasp",
+  "description": "Approach horizontally from the robot's side and close around the body.",
+  "requires": {
+    "max_width": 0.072
+  },
+  "params": {
+    "height_frac": {
+      "default": 0.5,
+      "range": [
+        0.2,
+        0.8
+      ],
+      "meaning": "grasp height as a fraction of the object's height from the bottom"
+    },
+    "approach_dist": {
+      "default": 0.1,
+      "range": [
+        0.06,
+        0.16
+      ],
+      "meaning": "horizontal distance from which the hand moves in towards the object"
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ],
+      "meaning": "speed of the final approach, m/s"
+    },
+    "grip_force": {
+      "default": 25,
+      "range": [
+        5,
+        40
+      ],
+      "meaning": "closing force, N"
+    }
+  },
+  "check": "fingers closed on something",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written starting skill"
+    }
+  ]
+}

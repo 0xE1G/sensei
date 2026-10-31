@@ -1,0 +1,163 @@
+{
+  "name": "centre_grasp",
+  "version": 1,
+  "kind": "grasp",
+  "impl": "feature_pinch",
+  "description": "centre grasp, fingers closing across the object; found by exploration after top_grasp failed on cylinder (collision).",
+  "requires": {
+    "hollow": false
+  },
+  "params": {
+    "edge_offset": {
+      "default": 0.0612,
+      "range": [
+        0.0,
+        0.1
+      ],
+      "unit": "m inside the outer edge at grasp height"
+    },
+    "angle_deg": {
+      "default": 42.0962,
+      "range": [
+        -180,
+        180
+      ],
+      "unit": "azimuth from the side facing the robot"
+    },
+    "depth": {
+      "default": 0.0173,
+      "range": [
+        0.004,
+        0.06
+      ],
+      "unit": "m below the top"
+    },
+    "close_yaw_deg": {
+      "default": 37.9578,
+      "range": [
+        -90,
+        90
+      ],
+      "unit": "closing direction vs radial (0 = across a wall)"
+    },
+    "tilt_deg": {
+      "default": -8.4295,
+      "range": [
+        -30,
+        30
+      ]
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ]
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ]
+    },
+    "grip_force": {
+      "default": 25.9258,
+      "range": [
+        5,
+        40
+      ]
+    }
+  },
+  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "exploration",
+      "run_id": "20261030-232707_explore_probe_cylinder",
+      "date": "2026-10-30",
+      "parent": {
+        "primitive": "feature_pinch",
+        "version": 1
+      },
+      "trigger": {
+        "skill": "top_grasp",
+        "skill_version": 1,
+        "label": "collision",
+        "labels": {
+          "collision": 22
+        },
+        "obj": "cylinder",
+        "task": "probe",
+        "task_kwargs": {
+          "region": {
+            "template": "cylinder",
+            "params": {
+              "radius": [
+                0.0156,
+                0.035
+              ],
+              "height": [
+                0.0848,
+                0.16
+              ],
+              "mass": [
+                0.0201,
+                0.3973
+              ],
+              "friction": [
+                0.4011,
+                1.4945
+              ]
+            }
+          }
+        }
+      },
+      "family": "centre_grasp",
+      "trials_simulated": 372,
+      "tune_best_train_rate": 1.0,
+      "results": {
+        "cluster": [
+          0,
+          20,
+          22
+        ],
+        "held_out": {
+          "before": 0.0,
+          "after": 1.0,
+          "ci95": [
+            0.806,
+            1.0
+          ],
+          "trials": 16
+        }
+      },
+      "diff": {
+        "edge_offset": [
+          0.05,
+          0.0612
+        ],
+        "angle_deg": [
+          0,
+          42.0962
+        ],
+        "depth": [
+          0.02,
+          0.0173
+        ],
+        "close_yaw_deg": [
+          0,
+          37.9578
+        ],
+        "tilt_deg": [
+          0,
+          -8.4295
+        ],
+        "grip_force": [
+          30,
+          25.9258
+        ]
+      }
+    }
+  ]
+}

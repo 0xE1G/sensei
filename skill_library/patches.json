@@ -1,0 +1,170 @@
+{
+ "place_in": {
+  "solid-narrow-tall": {
+   "date": "2026-10-31",
+   "diff": {
+    "clearance": [
+     0.02,
+     0.0
+    ]
+   },
+   "evidence": {
+    "success": 11,
+    "trials": 12
+   },
+   "params": {
+    "clearance": 0.0
+   },
+   "source": "investigator",
+   "sources": [
+    "20261031-013109_explore_probe_cylinder"
+   ],
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4019,
+         1.4775
+        ],
+        "height": [
+         0.0872,
+         0.1596
+        ],
+        "mass": [
+         0.0255,
+         0.3843
+        ],
+        "radius": [
+         0.015,
+         0.0225
+        ]
+       },
+       "template": "cylinder"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
+ "top_grasp": {
+  "solid-narrow-short": {
+   "date": "2026-10-31",
+   "diff": {
+    "clear_side": [
+     0,
+     1.0
+    ]
+   },
+   "evidence": {
+    "success": 2,
+    "trials": 4
+   },
+   "params": {
+    "clear_side": 1.0
+   },
+   "source": "investigator",
+   "sources": [
+    "20261031-021559_explore_probe_block"
+   ],
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "obstacle": {
+        "dist": [
+         0.0602,
+         0.1231
+        ],
+        "height": [
+         0.1006,
+         0.1597
+        ],
+        "radius": [
+         0.021,
+         0.03
+        ]
+       },
+       "params": {
+        "friction": [
+         0.4106,
+         1.4653
+        ],
+        "mass": [
+         0.0245,
+         0.2962
+        ],
+        "size": [
+         0.0305,
+         0.0643
+        ]
+       },
+       "template": "block"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  },
+  "solid-wide-short": {
+   "date": "2026-10-31",
+   "diff": {
+    "clear_side": [
+     0,
+     1.0
+    ]
+   },
+   "evidence": {
+    "success": 9,
+    "trials": 10
+   },
+   "params": {
+    "clear_side": 1.0
+   },
+   "source": "investigator",
+   "sources": [
+    "20261031-021559_explore_probe_block"
+   ],
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "obstacle": {
+        "dist": [
+         0.0602,
+         0.1231
+        ],
+        "height": [
+         0.1006,
+         0.1597
+        ],
+        "radius": [
+         0.021,
+         0.03
+        ]
+       },
+       "params": {
+        "friction": [
+         0.4106,
+         1.4653
+        ],
+        "mass": [
+         0.0245,
+         0.2962
+        ],
+        "size": [
+         0.0305,
+         0.0643
+        ]
+       },
+       "template": "block"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ }
+}

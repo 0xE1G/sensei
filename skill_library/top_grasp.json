@@ -1,0 +1,68 @@
+{
+  "name": "top_grasp",
+  "version": 1,
+  "kind": "grasp",
+  "description": "Come straight down over the object's centre and close across its top.",
+  "requires": {
+    "hollow": false,
+    "max_width": 0.072
+  },
+  "params": {
+    "depth_frac": {
+      "default": 0.5,
+      "range": [
+        0.15,
+        0.85
+      ],
+      "meaning": "how far below the object's top the fingertips go, as a fraction of its height (0.5 = half way down); the fingers are ~5 cm long, so deeper than ~4.5 cm puts the palm on the top"
+    },
+    "yaw_offset_deg": {
+      "default": 0,
+      "range": [
+        -45,
+        45
+      ],
+      "meaning": "gripper rotation about vertical relative to the perceived orientation; the result is folded to +-45 deg"
+    },
+    "approach_height": {
+      "default": 0.1,
+      "range": [
+        0.05,
+        0.2
+      ],
+      "meaning": "hover height above the object's top before descending (does not change the grasp)"
+    },
+    "descend_speed": {
+      "default": 0.12,
+      "range": [
+        0.04,
+        0.3
+      ],
+      "meaning": "descent speed from the hover pose, m/s"
+    },
+    "grip_force": {
+      "default": 25,
+      "range": [
+        5,
+        40
+      ],
+      "meaning": "closing force, N"
+    },
+    "clear_side": {
+      "default": 0,
+      "range": [
+        0,
+        1
+      ],
+      "meaning": "1 = on a square top, turn the hand 90 deg if that keeps it farther from tall neighbouring objects (the hand is ~22 cm long along the finger direction); 0 = off"
+    }
+  },
+  "check": "fingers closed on something: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written starting skill"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "lift",
+  "version": 1,
+  "kind": "transport",
+  "description": "Raise the held object to transport height.",
+  "params": {
+    "height": {
+      "default": 0.15,
+      "range": [
+        0.05,
+        0.3
+      ],
+      "meaning": "how far to raise the held object, m"
+    },
+    "speed": {
+      "default": 0.25,
+      "range": [
+        0.05,
+        0.5
+      ],
+      "meaning": "lift speed, m/s"
+    }
+  },
+  "check": "finger width still above 3 mm and above 40% of the width at grasp",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written starting skill"
+    }
+  ]
+}

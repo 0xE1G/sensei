@@ -1,0 +1,138 @@
+{
+  "name": "rim_pinch",
+  "version": 1,
+  "kind": "grasp",
+  "impl": "feature_pinch",
+  "description": "rim grasp, fingers closing radially; found by exploration after top_grasp failed (missed_grasp).",
+  "requires": {
+    "hollow": true,
+    "rim": true
+  },
+  "params": {
+    "edge_offset": {
+      "default": 0.0039,
+      "range": [
+        0.0,
+        0.1
+      ],
+      "unit": "m inside the outer edge at grasp height"
+    },
+    "angle_deg": {
+      "default": -28.3607,
+      "range": [
+        -180,
+        180
+      ],
+      "unit": "azimuth from the side facing the robot"
+    },
+    "depth": {
+      "default": 0.0129,
+      "range": [
+        0.004,
+        0.06
+      ],
+      "unit": "m below the top"
+    },
+    "close_yaw_deg": {
+      "default": -5.2214,
+      "range": [
+        -90,
+        90
+      ],
+      "unit": "closing direction vs radial (0 = across a wall)"
+    },
+    "tilt_deg": {
+      "default": 8.059,
+      "range": [
+        -30,
+        30
+      ]
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ]
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ]
+    },
+    "grip_force": {
+      "default": 30.0,
+      "range": [
+        5,
+        40
+      ]
+    }
+  },
+  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "exploration",
+      "run_id": "20261030-214545_explore_sort_with_bowl",
+      "date": "2026-10-30",
+      "parent": {
+        "primitive": "feature_pinch",
+        "version": 1
+      },
+      "trigger": {
+        "skill": "top_grasp",
+        "skill_version": 1,
+        "label": "missed_grasp",
+        "labels": {
+          "missed_grasp": 14,
+          "collision": 10
+        },
+        "obj": "bowl_blue",
+        "task": "sort_with_bowl"
+      },
+      "family": "rim_pinch",
+      "trials_simulated": 392,
+      "tune_best_train_rate": 1.0,
+      "results": {
+        "cluster": [
+          0,
+          24,
+          24
+        ],
+        "held_out": {
+          "before": 0.0,
+          "after": 1.0,
+          "ci95": [
+            0.806,
+            1.0
+          ],
+          "trials": 16
+        }
+      },
+      "diff": {
+        "edge_offset": [
+          0.05,
+          0.0039
+        ],
+        "angle_deg": [
+          0,
+          -28.3607
+        ],
+        "depth": [
+          0.02,
+          0.0129
+        ],
+        "close_yaw_deg": [
+          0,
+          -5.2214
+        ],
+        "tilt_deg": [
+          0,
+          8.059
+        ]
+      }
+    }
+  ]
+}

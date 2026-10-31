@@ -1,0 +1,40 @@
+{
+  "name": "place_in",
+  "version": 1,
+  "kind": "place",
+  "description": "Carry over the target, lower to just above it, release.",
+  "params": {
+    "clearance": {
+      "default": 0.02,
+      "range": [
+        0.0,
+        0.08
+      ],
+      "meaning": "height of the held object's bottom above the target surface at release, m (0 = set down)"
+    },
+    "speed": {
+      "default": 0.3,
+      "range": [
+        0.05,
+        0.5
+      ],
+      "meaning": "transport speed while carrying, m/s"
+    },
+    "drop_height": {
+      "default": 0.06,
+      "range": [
+        0.02,
+        0.15
+      ],
+      "meaning": "release height above the target in drop mode, m"
+    }
+  },
+  "check": "something was held at release; post-place perception confirms the item is over the target",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written starting skill"
+    }
+  ]
+}

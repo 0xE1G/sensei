@@ -1,0 +1,83 @@
+{
+  "name": "axis_pinch",
+  "version": 1,
+  "kind": "grasp_primitive",
+  "description": "Parallel-jaw grasp placed in the object's principal frame (offsets along the long and short axes, closing angle relative to the long axis). Search space for oriented and elongated shapes; never chosen by the planner directly.",
+  "search_params": [
+    "along",
+    "across",
+    "depth",
+    "close_deg",
+    "tilt_deg"
+  ],
+  "params": {
+    "along": {
+      "default": 0.0,
+      "range": [
+        -0.8,
+        0.8
+      ],
+      "unit": "fraction of the half long extent"
+    },
+    "across": {
+      "default": 0.0,
+      "range": [
+        -0.8,
+        0.8
+      ],
+      "unit": "fraction of the half short extent"
+    },
+    "depth": {
+      "default": 0.015,
+      "range": [
+        0.004,
+        0.06
+      ],
+      "unit": "m below the top"
+    },
+    "close_deg": {
+      "default": 0,
+      "range": [
+        -90,
+        90
+      ],
+      "unit": "closing direction vs the short axis (0 = across the long axis)"
+    },
+    "tilt_deg": {
+      "default": 0,
+      "range": [
+        -30,
+        30
+      ]
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ]
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ]
+    },
+    "grip_force": {
+      "default": 30,
+      "range": [
+        5,
+        40
+      ]
+    }
+  },
+  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written search primitive"
+    }
+  ]
+}

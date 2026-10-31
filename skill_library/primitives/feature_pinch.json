@@ -1,0 +1,83 @@
+{
+  "name": "feature_pinch",
+  "version": 1,
+  "kind": "grasp_primitive",
+  "description": "Parallel-jaw grasp placed relative to perceived features (edge, top, wall slope). Search space for the explorer; never chosen by the planner directly.",
+  "params": {
+    "edge_offset": {
+      "default": 0.05,
+      "range": [
+        0.0,
+        0.1
+      ],
+      "unit": "m inside the outer edge at grasp height"
+    },
+    "angle_deg": {
+      "default": 0,
+      "range": [
+        -180,
+        180
+      ],
+      "unit": "azimuth from the side facing the robot"
+    },
+    "depth": {
+      "default": 0.02,
+      "range": [
+        0.004,
+        0.06
+      ],
+      "unit": "m below the top"
+    },
+    "close_yaw_deg": {
+      "default": 0,
+      "range": [
+        -90,
+        90
+      ],
+      "unit": "closing direction vs radial (0 = across a wall)"
+    },
+    "tilt_deg": {
+      "default": 0,
+      "range": [
+        -30,
+        30
+      ]
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ]
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ]
+    },
+    "grip_force": {
+      "default": 30,
+      "range": [
+        5,
+        40
+      ]
+    }
+  },
+  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written search primitive"
+    }
+  ],
+  "search_params": [
+    "edge_offset",
+    "angle_deg",
+    "depth",
+    "close_yaw_deg",
+    "tilt_deg"
+  ]
+}

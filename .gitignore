@@ -1,0 +1,12 @@
+# generated
+runs/
+cache/
+experiments/baselines/
+__pycache__/
+*.pyc
+# downloaded (scripts/fetch_assets.py)
+assets/
+# leftovers from copying files onto this PC
+.sync.tgz
+.sync.tar
+.sync_stamp

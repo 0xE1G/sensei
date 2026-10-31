@@ -1,0 +1,77 @@
+{
+  "name": "rim_pinch_handwritten",
+  "version": 1,
+  "kind": "grasp",
+  "description": "One finger inside the rim, one outside, closing across the wall. Hand-written reference, NOT in the active library: used only to compare against the variant the explorer discovers.",
+  "requires": {
+    "hollow": true,
+    "rim": true
+  },
+  "params": {
+    "angle_deg": {
+      "default": 0,
+      "range": [
+        -90,
+        90
+      ],
+      "meaning": "azimuth around the rim from the side facing the robot"
+    },
+    "depth": {
+      "default": 0.018,
+      "range": [
+        0.006,
+        0.035
+      ],
+      "meaning": "how far below the rim the fingertips go, m"
+    },
+    "tilt_deg": {
+      "default": 0,
+      "range": [
+        -30,
+        30
+      ],
+      "meaning": "lean of the approach"
+    },
+    "wall_guess": {
+      "default": 0.007,
+      "range": [
+        0.003,
+        0.015
+      ],
+      "meaning": "assumed wall thickness, m"
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ],
+      "meaning": "hover height above the rim, m"
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ],
+      "meaning": "descent speed, m/s"
+    },
+    "grip_force": {
+      "default": 30,
+      "range": [
+        5,
+        40
+      ],
+      "meaning": "closing force, N"
+    }
+  },
+  "check": "fingers closed on the wall: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "seed",
+      "note": "hand-written starting skill"
+    }
+  ],
+  "impl": "rim_pinch"
+}

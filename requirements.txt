@@ -1,0 +1,8 @@
+mujoco>=3.2
+mink>=0.0.5
+daqp
+numpy
+imageio
+imageio-ffmpeg
+optuna
+jsonschema

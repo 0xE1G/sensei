@@ -1,0 +1,238 @@
+{
+ "axis_centre_across": {
+  "solid-wide-short-long": {
+   "sources": [
+    "20261031-003922_explore_probe_bar"
+   ],
+   "success": 17,
+   "trials": 19,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4342,
+         1.4886
+        ],
+        "height": [
+         0.02,
+         0.045
+        ],
+        "length": [
+         0.0805,
+         0.2195
+        ],
+        "mass": [
+         0.0213,
+         0.2883
+        ],
+        "width": [
+         0.0202,
+         0.0442
+        ]
+       },
+       "template": "bar"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
+ "centre_grasp": {
+  "solid-narrow-tall": {
+   "sources": [
+    "20261030-234603_explore_probe_cylinder"
+   ],
+   "success": 28,
+   "trials": 30,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4011,
+         1.4945
+        ],
+        "height": [
+         0.0848,
+         0.16
+        ],
+        "mass": [
+         0.0201,
+         0.3973
+        ],
+        "radius": [
+         0.0156,
+         0.035
+        ]
+       },
+       "template": "cylinder"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
+ "rim_pinch": {
+  "hollow-narrow-short": {
+   "sources": [
+    "20261030-232517_explore_probe_cup"
+   ],
+   "success": 8,
+   "trials": 8,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4296,
+         1.4983
+        ],
+        "height": [
+         0.07,
+         0.12
+        ],
+        "mass": [
+         0.0408,
+         0.2696
+        ],
+        "radius": [
+         0.03,
+         0.0339
+        ],
+        "wall": [
+         0.004,
+         0.0095
+        ]
+       },
+       "template": "cup"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  },
+  "hollow-narrow-tall": {
+   "sources": [
+    "20261030-232517_explore_probe_cup"
+   ],
+   "success": 14,
+   "trials": 15,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4296,
+         1.4983
+        ],
+        "height": [
+         0.07,
+         0.12
+        ],
+        "mass": [
+         0.0408,
+         0.2696
+        ],
+        "radius": [
+         0.03,
+         0.0339
+        ],
+        "wall": [
+         0.004,
+         0.0095
+        ]
+       },
+       "template": "cup"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  },
+  "hollow-wide-tall": {
+   "sources": [
+    "20261030-232517_explore_probe_cup"
+   ],
+   "success": 4,
+   "trials": 4,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "params": {
+        "friction": [
+         0.4296,
+         1.4983
+        ],
+        "height": [
+         0.07,
+         0.12
+        ],
+        "mass": [
+         0.0408,
+         0.2696
+        ],
+        "radius": [
+         0.03,
+         0.0339
+        ],
+        "wall": [
+         0.004,
+         0.0095
+        ]
+       },
+       "template": "cup"
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
+ "side_wrap": {
+  "hollow-narrow-short": {
+   "sources": [
+    "20261030-232517_explore_probe_cup"
+   ],
+   "success": 0,
+   "trials": 6
+  },
+  "hollow-narrow-tall": {
+   "sources": [
+    "20261030-232517_explore_probe_cup"
+   ],
+   "success": 0,
+   "trials": 11
+  },
+  "solid-narrow-tall": {
+   "sources": [
+    "20261030-234603_explore_probe_cylinder"
+   ],
+   "success": 0,
+   "trials": 24
+  }
+ },
+ "top_grasp": {
+  "solid-narrow-tall": {
+   "sources": [
+    "20261030-232707_explore_probe_cylinder"
+   ],
+   "success": 0,
+   "trials": 24
+  },
+  "solid-wide-short-long": {
+   "sources": [
+    "20261031-003922_explore_probe_bar"
+   ],
+   "success": 13,
+   "trials": 24
+  }
+ }
+}
