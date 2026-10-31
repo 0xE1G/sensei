@@ -59,7 +59,9 @@ def plan_program(prompt: str, task: dict, backend: str | None = None) -> dict:
                 "explanation": f"Reusing the verified program {card['name']} v{card['version']} "
                                f"({ev['success']}/{ev['trials']} in verification); no model call."}
     try:
-        pr = ModelClient(backend).complete("plan_program", {"prompt": prompt, "task": task})
+        from .agents.jobs.plan_program import library_capabilities
+        pr = ModelClient(backend).complete("plan_program", {"prompt": prompt, "task": task,
+                                                            "capabilities": library_capabilities()})
     except ModelRejected as e:
         return {"program": None, "source": None, "explanation": "The model's program was rejected "
                 f"({'; '.join(e.reasons)[:300]}); the fixed plan will run instead."}
@@ -98,7 +100,10 @@ class Events:
         self.f.flush()
 
 
-STAGE_WORDS = [("[auto_repair]", "check"), ("[investigate]", "diagnose"), ("[explore] before", "measure"),
+STAGE_WORDS = [("[create_skill] before", "measure"), ("[create_skill] proposal", "propose"),
+               ("[create_skill] search", "search"), ("[create_skill] no candidate", "propose"), ("[create_skill] gates failed", "propose"),
+               ("[create_skill] tune", "tune"), ("[create_skill] gate", "verify"),
+               ("[create_skill] PROMOTED", "learned"), ("[create_skill]", None), ("[auto_repair]", "check"), ("[investigate]", "diagnose"), ("[explore] before", "measure"),
                ("[explore] gate", "verify"), ("[explore] PROMOTED", "learned"), ("[explore] PATCHED", "learned"),
                ("[explore] ROUTED", "learned"), ("[explore]", "search")]
 
@@ -151,12 +156,32 @@ def _batch(job, task, seeds, run_id, phase, emit):
     return s
 
 
-def _missing_capability(run_dir: pathlib.Path):
-    for p in run_dir.glob("trials/*.json"):
-        m = json.loads(p.read_text()).get("missing_capability")
-        if m:
-            return m
+def _missing_call(run_dir: pathlib.Path):
+    """The use(capability, obj, target) call that found no skill, from the first run's trial records."""
+    for p in sorted(run_dir.glob("trials/*.json")):
+        rec = json.loads(p.read_text())
+        if rec.get("missing_capability"):
+            return rec.get("missing_call") or {"capability": rec["missing_capability"], "obj": None, "target": None}
     return None
+
+
+def _create_skill(job, task, call, rel, emit):
+    """Model-written primitive for the missing capability: proposals -> search -> tune -> gates -> card."""
+    from .agents.llm import ModelClient
+    from .create_skill import SkillCreator
+    sc = SkillCreator(call["capability"], workers=job["workers"], client=ModelClient(job.get("backend")),
+                      task_spec=task, program=task.get("program"), obj=call.get("obj"), target=call.get("target"),
+                      run_id=f"{rel}/create_{call['capability']}")
+    rep = sc.run()
+    gate = rep.get("phases", {}).get("gate") or {}
+    return {"changed": rep.get("outcome") == "promoted", "created": True, "capability": call["capability"],
+            "run_id": rep["run_id"], "outcome": rep.get("outcome"),
+            "promoted": (rep.get("promoted") or {}).get("card"),
+            "proposals": [{"name": p["card"]["name"], "attempt": p["attempt"], "option": p["option"],
+                           "description": p["card"]["description"][:200]}
+                          for p in rep.get("phases", {}).get("proposals", [])],
+            "held_out": gate.get("held_out"), "regression": (gate.get("no_regression") or {}).get("pass"),
+            "trials": rep.get("trials_simulated")}
 
 
 def run_job(job_dir: pathlib.Path):
@@ -180,15 +205,13 @@ def run_job(job_dir: pathlib.Path):
             raise RuntimeError("no layout of this task fits on the table: fewer or smaller objects needed")
         before = _batch(job, task, seeds, f"{rel}/run", "run", emit)
         result["before"] = {k: before[k] for k in ("success", "trials", "failure_labels", "run_id")}
-        robot_failures = sum(before["failure_labels"].get(k, 0) for k in before["failure_labels"] if k != "episode_error")
+        robot_failures = sum(v for k, v in before["failure_labels"].items() if k != "episode_error")
         if robot_failures and job.get("auto_fix"):
-            missing = _missing_capability(job_dir / "run")
-            emit("stage", stage="repair", state="start")
-            if missing:
-                result["repair"] = {"changed": False, "missing_capability": missing,
-                                    "message": f"The plan needs a skill the library does not have ({missing}). "
-                                               "Creating new skills from the studio is not wired yet: "
-                                               "use scripts/create_skill.py."}
+            call = _missing_call(job_dir / "run")
+            emit("stage", stage="repair", state="start", mode="create" if call else "repair",
+                 capability=call and call["capability"])
+            if call:
+                result["repair"] = _create_skill(job, task, call, rel, emit)
             else:
                 rep = auto_repair([job_dir / "run"], workers=job["workers"], client=ModelClient(job.get("backend")),
                                   min_failures=1, max_cases=4, run_id=f"{rel}/repair",

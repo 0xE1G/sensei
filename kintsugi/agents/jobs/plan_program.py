@@ -20,8 +20,17 @@ def _task_view(task):
             "goal": task["goal"], "constraints": task.get("constraints", [])}
 
 
+def library_capabilities() -> list[str]:
+    """Kinds of verified model-written skills in the active library (push, ...)."""
+    from ...skills import library as L
+    return sorted({c["kind"] for c in L.load_cards().values() if c.get("impl") == "generated"})
+
+
 def render(inputs):
-    return _SYSTEM, (_USER.replace("{prompt}", inputs.get("prompt") or "")
+    caps = inputs.get("capabilities")
+    caps = library_capabilities() if caps is None else caps
+    return (_SYSTEM.replace("{capabilities}", ", ".join(caps) or "none"),
+            _USER.replace("{prompt}", inputs.get("prompt") or "")
                      .replace("{task}", json.dumps(_task_view(inputs["task"]), indent=1)))
 
 
@@ -45,7 +54,11 @@ def rule(inputs) -> dict:
         order.append(ready[0])
         done.add(ready[0]["obj"])
     lines = []
+    kinds = {o["id"]: o["template"] for o in inputs["task"]["objects"]}
     for g in order:
+        if kinds.get(g["obj"]) == "plate":            # no grasp lifts a plate: it needs a motion, not a pick
+            lines += [f'use("push", find_one(id="{g["obj"]}"), find_one(id="{g["target"]}"))']
+            continue
         lines += [f'obj = find_one(id="{g["obj"]}")',
                   "ok = pick(obj)",
                   "if not ok and next_best_grasp(obj):",

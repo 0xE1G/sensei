@@ -7,8 +7,11 @@
     tune      Optuna on the best candidates (perturbed physics), confirmed on fresh scenes
     gate      held-out scenes: after (program using the new card) vs before (current library), paired McNemar test,
               >= 70% success; regression tasks unchanged
-    promote   skill_library/<name>.json: kind "push", impl "generated", the code, tuned defaults, lineage
+    promote   skill_library/<name>.json: kind = the capability, impl "generated", the code, tuned defaults, lineage
               (source "model-written primitive", who wrote it, attempts, search and gate evidence)
+
+The task is a named task (scripts/create_skill.py) or a typed request's task spec with the plan program that asked
+for the capability (the studio: program use("<capability>", obj, target) found no skill of that kind).
 """
 from __future__ import annotations
 
@@ -37,12 +40,20 @@ def _log(msg):
 
 
 class SkillCreator:
-    def __init__(self, capability, task_name, workers=None, client=None, n_candidates=40, search_seeds=3,
-                 tune_trials=16, tune_seeds=4, n_dev=16, run_id=None, seed=0, n_strategies=3):
+    def __init__(self, capability, task_name=None, workers=None, client=None, n_candidates=40, search_seeds=3,
+                 tune_trials=16, tune_seeds=4, n_dev=16, run_id=None, seed=0, n_strategies=3,
+                 task_spec=None, program=None, obj=None, target=None, description=None):
+        """task_spec + program + obj/target: a typed request whose plan called use(capability, obj, target);
+        description: what the capability must do (default: from CAPABILITIES, else from the request)."""
         from .agents.llm import ModelClient
-        from .tasks.specs import make_task
-        self.cap = CAPABILITIES[capability]
+        self.task_spec = ({k: v for k, v in task_spec.items() if k not in ("program", "program_source")}
+                          if task_spec else None)
+        self.cap = CAPABILITIES.get(capability) or {
+            "kind": capability, "description": description or (
+                "move the object as the request asks, without the library's grasp/place skills "
+                f"(request: {(self.task_spec or {}).get('prompt') or task_name!r})")}
         self.capability, self.task_name = capability, task_name
+        self.task_label = task_name or (self.task_spec or {}).get("name", "spec")
         self.client = client or ModelClient()
         self.n_candidates, self.search_seeds = n_candidates, search_seeds
         self.tune_trials, self.tune_seeds, self.n_dev = tune_trials, tune_seeds, n_dev
@@ -52,28 +63,38 @@ class SkillCreator:
         self.out = ROOT / "runs" / self.run_id
         self.out.mkdir(parents=True, exist_ok=True)
         self.pool = TrialPool(workers)
-        t0 = make_task(task_name, seed=0)
-        goal = t0["goal"][0]
-        self.obj, self.target = goal["obj"], goal["target"]
-        self.program = self.cap["program"].format(obj=self.obj, target=self.target)
-        self.report = {"run_id": self.run_id, "capability": capability, "task": task_name, "phases": {},
+        goal = self._task(0)["goal"][0]
+        self.obj, self.target = obj or goal["obj"], target if (obj or target) else goal.get("target")
+        self.program = program or self.cap["program"].format(obj=self.obj, target=self.target)
+        self.report = {"run_id": self.run_id, "capability": capability, "task": self.task_label,
+                       "description": self.cap["description"], "program": self.program, "phases": {},
                        "trials_simulated": 0}
         self.t0 = time.time()
 
     # ------------------------------------------------------------------ plumbing
+    def _task(self, seed):
+        """The task for one scene: a named task's spec, or the typed request's spec (placement varies by seed)."""
+        from .tasks.specs import make_task
+        if self.task_spec:
+            return make_task("spec", seed=seed, task_spec=self.task_spec)
+        return make_task(self.task_name, seed=seed)
+
     def _cfg(self, tag, card=None, params=None, perturb=None, task=None, program=True):
         extra = {card["name"]: card} if card else None
         overrides = {card["name"]: params} if (card and params) else None
-        return trial_cfg(task or self.task_name, self.out, save_failures=False, success_sample=0, save_video=False,
+        if task is None and self.task_spec:
+            task, kw = "spec", {"task_spec": self.task_spec}
+        else:
+            task, kw = task or self.task_name, {}
+        return trial_cfg(task, self.out, save_failures=False, success_sample=0, save_video=False,
                          save_poses=False, tag=tag, extra_cards=extra, overrides=overrides, perturb=perturb,
-                         task_kwargs={})
+                         task_kwargs=kw)
 
     def _run_program(self, tag, card, params, seeds, perturb=None):
         """The task's own spec + the capability program, as a task_spec per seed."""
-        from .tasks.specs import make_task
         jobs = []
         for s in seeds:
-            spec = {**make_task(self.task_name, seed=s), "program": self.program}
+            spec = {**self._task(s), "program": self.program}
             cfg = self._cfg(tag, card, params, perturb)
             cfg["task_spec"] = spec
             jobs.append((cfg, s))
@@ -108,9 +129,13 @@ class SkillCreator:
     def _examples(self):
         from .perception.perceive import Perception
         from .sim.scene import build_scene
-        from .tasks.specs import make_task
-        t = make_task(self.task_name, seed=0)
-        per = Perception(build_scene(t, seed=0))
+        for s in range(20):                     # the first layout that fits on the table
+            try:
+                scene = build_scene(self._task(s), seed=s)
+                break
+            except RuntimeError:
+                continue
+        per = Perception(scene)
         d = per.perceive([self.obj, self.target])
         per.close()
         keep = ("center", "width", "height", "top_z", "axis_yaw", "extent_major", "extent_minor")
@@ -119,7 +144,7 @@ class SkillCreator:
 
     def propose(self, before, feedback=None, others=None):
         obj, target = self._examples()
-        why = (f"the task '{self.task_name}' fails with the current library ({before['success']}/{before['trials']}; "
+        why = (f"the task '{self.task_label}' fails with the current library ({before['success']}/{before['trials']}; "
                f"grasp failures {before['labels']}); a plan asking for {self.capability} reports: "
                f"{before['missing_capability'] or before['program_error']}")
         res = self.client.complete("propose_primitive", {"capability": f"{self.capability}: {self.cap['description']}",
@@ -127,7 +152,7 @@ class SkillCreator:
                                                          "feedback": feedback, "other_strategies": others})
         out = res.output
         card = {"name": out["name"] if out["name"].startswith(self.capability) else f"{self.capability}_{out['name']}",
-                "version": 1, "kind": self.cap["kind"], "impl": "generated", "code": out["code"],
+                "version": 1, "kind": self.capability, "impl": "generated", "code": out["code"],
                 "description": out.get("explanation", ""), "check": out.get("check", ""),
                 "params": {k: {"default": v["default"], "range": v["range"], "meaning": v.get("meaning", "")}
                            for k, v in out["params"].items()}}
@@ -140,12 +165,11 @@ class SkillCreator:
                                 for _ in range(self.n_candidates)]
         seeds = split_seeds("train", self.search_seeds, start=10)
         rows = []
-        from .tasks.specs import make_task
         jobs = []
         for i, c in enumerate(cands):
             for s in seeds:
                 cfg = self._cfg(f"a{attempt}_cand{i}", card, c)
-                cfg["task_spec"] = {**make_task(self.task_name, seed=s), "program": self.program}
+                cfg["task_spec"] = {**self._task(s), "program": self.program}
                 jobs.append((cfg, s))
         res = {(r["tag"], r["seed"]): r for r in self.pool.map(jobs)}
         self.report["trials_simulated"] += len(jobs)
@@ -262,7 +286,8 @@ class SkillCreator:
     def promote(self, card, meta, attempts, gate):
         card["lineage"] = [{"version": 1, "source": "model-written primitive", "run_id": self.run_id,
                             "date": time.strftime("%Y-%m-%d"), "written_by": meta, "attempts": attempts,
-                            "capability": self.capability, "task": self.task_name,
+                            "capability": self.capability, "task": self.task_label,
+                            "description": self.cap["description"],
                             "trials_simulated": self.report["trials_simulated"],
                             "results": {"held_out": [gate["held_out"]["before"], gate["held_out"]["success"],
                                                      gate["held_out"]["trials"]], "p_value": gate["held_out"]["p_value"]}}]

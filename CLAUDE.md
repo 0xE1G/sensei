@@ -341,6 +341,19 @@ round started by the search (see status).
    outcome "rare_failure" once the Wilson 95% upper bound of the valid-failure rate is < 10% (pre-declared; off by
    default, so experiments and earlier reports are unchanged). The UI reports it as "too rare to fix" with the
    measured count.
+4k. **Missing skills are created from the studio**: program API `use(capability, obj, target=None)` runs a verified
+   generated card whose kind == capability (push(...) = use("push", ...)); with none it stops with "missing
+   capability: <kind>" and records `missing_call` {capability, obj, target} in the trial record. Plan prompt v5 tells
+   the model to still write use("<capability>") when the library lacks it and lists the library's capabilities
+   (input `capabilities`, part of the cache key). `SkillCreator` takes a typed request's task_spec + the user's
+   program + obj/target + description (named tasks still work: scripts/create_skill.py); card kind = capability.
+   Studio job: missing_call -> SkillCreator -> re-run the same seeds if promoted; UI shows a creation checklist
+   (confirm missing, write candidates, try, tune, verify, add). Tested with push_from_behind moved out of the
+   library: "Move the plate onto the blue zone." (Claude) -> 0/8 program_error -> 3 strategies, straddle push won
+   (39/41 settings succeed once), tuned 8/8, gate 16/16 vs 0/16 (p 1.5e-05), regression pass -> 8/8 re-run, 6.5 min,
+   522 trials. The original card was restored; the test card is kept in
+   runs/20261031-193322_studio/create_push/. Limit: success must be expressible with existing goal predicates
+   (on/in/upright), so new capabilities are ones whose result the monitor can already check.
 
 **Remaining, in order** (plan build order 8c onwards):
 6. done: Model-written primitives (8c), see 4g.

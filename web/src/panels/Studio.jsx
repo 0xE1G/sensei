@@ -30,6 +30,14 @@ const STAGES = [
   ["verify", "Verify on held-out objects", "statistical gates: fixes the failures, no regressions"],
   ["learned", "Add it to the skill library", "only if every gate passed"],
 ];
+const CREATE_STAGES = [
+  ["measure", "Confirm the skill is missing", "the plan stops at the motion the library cannot do"],
+  ["propose", "Write candidate motions", "the model writes 3 different strategies as motion code (revised once with feedback if needed)"],
+  ["search", "Try them in simulation", "each strategy with ~40 parameter settings on several scenes"],
+  ["tune", "Tune the best one", "Optuna under perturbed physics, confirmed on fresh scenes"],
+  ["verify", "Verify on held-out scenes", "statistical gates: works on new scenes, no regressions"],
+  ["learned", "Add it to the skill library", "only if every gate passed"],
+];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function sourceChip(src) {
@@ -263,14 +271,14 @@ function Tiles({ trials, seeds, runningSeeds, onPick, title }) {
   );
 }
 
-function RepairProgress({ logs, stageDone, current }) {
-  const order = STAGES.map(([k]) => k);
+function RepairProgress({ logs, stageDone, current, stages = STAGES }) {
+  const order = stages.map(([k]) => k);
   const reached = order.indexOf(current);
   const seen = new Set(order.filter((k, i) => i < reached || logs.some((l) => l.stage === k)));
   const last = logs.length ? logs[logs.length - 1].line.replace(/^\[\w+\]\s*/, "") : "starting…";
   return (
     <ol className="repair">
-      {STAGES.filter(([k]) => k !== "learned" || seen.has("learned")).map(([k, title, how]) => {
+      {stages.filter(([k]) => k !== "learned" || seen.has("learned")).map(([k, title, how]) => {
         const state = current === k && !stageDone ? "active" : seen.has(k) ? "done" : "";
         return (
           <li key={k} className={state}>
@@ -290,10 +298,21 @@ function Outcome({ result, open }) {
       <div className="nums">
         <div><span className="sub">first run</span><b className={before.success === before.trials ? "ok" : "bad"}>{before.success}/{before.trials}</b></div>
         {after && <><span className="arrow">→</span>
-          <div><span className="sub">after the fix</span><b className={after.success === after.trials ? "ok" : ""}>{after.success}/{after.trials}</b></div></>}
+          <div><span className="sub">{repair?.created ? "with the new skill" : "after the fix"}</span><b className={after.success === after.trials ? "ok" : ""}>{after.success}/{after.trials}</b></div></>}
         <Chip status="measured" />
       </div>
-      {repair?.missing_capability && <p>{repair.message}</p>}
+      {repair?.created && (
+        <div className="clusters">
+          <p>
+            {repair.changed ? <><Chip status="confirmed">learned</Chip> new skill <b>{repair.promoted}</b> for "{nice(repair.capability)}"</>
+              : <><Chip status="rejected">not learned</Chip> no proposed {nice(repair.capability)} skill passed the gates</>}
+          </p>
+          {repair.held_out && <div className="sub">held-out scenes: {repair.held_out.before}/{repair.held_out.trials} before → {repair.held_out.success}/{repair.held_out.trials} with the new skill
+            {repair.held_out.p_value != null ? ` (p = ${repair.held_out.p_value.toPrecision(2)})` : ""} · regression {repair.regression ? "none" : "found"} · {repair.trials} simulated trials</div>}
+          {repair.proposals?.length > 0 && <div className="sub">proposals: {repair.proposals.map((p) => p.name).join(", ")}</div>}
+          <button className="link" onClick={() => open({ tab: "experiments", run: repair.run_id })}>see the proposals, search and gates →</button>
+        </div>
+      )}
       {repair?.clusters && (
         <ul className="clusters">
           {repair.clusters.map((c, i) => {
@@ -398,7 +417,10 @@ export default function Studio({ open }) {
   const seeds = stageEv("run", "start")?.seeds || Array.from({ length: job?.meta?.n || settings.n }, (_, i) => i);
   const n = seeds.length;
   const sceneNo = (meta) => (meta.tag ? meta.seed : seeds.indexOf(meta.seed) + 1);
-  const order = STAGES.map(([k]) => k);                    // the furthest stage reached (log lines can repeat earlier ones)
+  const repairStart = stageEv("repair", "start");
+  const creating = repairStart?.mode === "create";
+  const stageList = creating ? CREATE_STAGES : STAGES;
+  const order = stageList.map(([k]) => k);                 // the furthest stage reached (log lines can repeat earlier ones)
   const repairStage = logs.reduce((best, l) => (l.stage && order.indexOf(l.stage) > order.indexOf(best) ? l.stage : best), null);
   const phase = !job ? null : result || error || stopped || !job.running ? "done"
     : stageEv("rerun", "start") ? "rerun" : stageEv("repair", "start") ? "repair" : "run";
@@ -412,13 +434,13 @@ export default function Studio({ open }) {
     } catch {}
   };
 
-  const runTrials = trials("run");
-  useEffect(() => {
-    if (job && !job.running && !player.b && runTrials.length) {
-      const t = runTrials.find((x) => !x.success && !x.labels.includes("episode_error")) || runTrials[0];
-      pickTile("run", t.seed);
-    }
-  }, [job?.id, job?.running, runTrials.length]);
+  const runTrials = trials("run"), rerunTrials = trials("rerun");
+  useEffect(() => {                                        // a finished job opens its most telling scene
+    if (!job || job.running || player.b || !runTrials.length) return;
+    if (rerunTrials.length) return void pickTile("rerun", (rerunTrials.find((x) => x.success) || rerunTrials[0]).seed);
+    const t = runTrials.find((x) => !x.success && !x.labels.includes("episode_error")) || runTrials[0];
+    pickTile("run", t.seed);
+  }, [job?.id, job?.running, runTrials.length, rerunTrials.length]);
 
   const steps = [
     ["understand", plan?.phase === "answer" && !job ? "Understand · needs your input" : "Understand",
@@ -433,15 +455,20 @@ export default function Studio({ open }) {
   if (job) {
     const t1 = trials("run"), ok1 = t1.filter((t) => t.success).length;
     if (phase === "run") headline = `Running ${n} scene${n > 1 ? "s" : ""} on ${job.meta?.workers || settings.workers} parallel workers · ${t1.length}/${n} done, ${ok1} succeeded`;
-    else if (phase === "repair") headline = `${t1.length - ok1} of ${t1.length} failed. Kintsugi is finding out why and searching for a fix in simulation…`;
-    else if (phase === "rerun") headline = `A fix passed every check and was added to the library. Running the same ${n} scenes again…`;
+    else if (phase === "repair") headline = creating
+      ? `The plan needs a skill the library does not have ("${nice(repairStart.capability)}"). The model is writing candidate motions; simulation decides which, if any, to keep…`
+      : `${t1.length - ok1} of ${t1.length} failed. Kintsugi is finding out why and searching for a fix in simulation…`;
+    else if (phase === "rerun") headline = creating
+      ? `A new skill passed every check and was added to the library. Running the same ${n} scenes again…`
+      : `A fix passed every check and was added to the library. Running the same ${n} scenes again…`;
     else if (error) headline = `The job stopped with an error: ${error.message}`;
     else if (stopped) headline = "Stopped. Nothing after this point was kept.";
     else if (result) {
       const { before, after, repair } = result;
-      headline = after ? `Fixed: ${before.success}/${before.trials} → ${after.success}/${after.trials} on the same scenes.`
+      headline = after && repair?.created ? `Learned a new skill (${repair.promoted}): ${before.success}/${before.trials} → ${after.success}/${after.trials} on the same scenes.`
+        : after ? `Fixed: ${before.success}/${before.trials} → ${after.success}/${after.trials} on the same scenes.`
+        : repair?.created ? `${before.success}/${before.trials} succeeded. The model's ${nice(repair.capability)} skills did not pass the checks, so nothing was added.`
         : before.success === before.trials ? `All ${before.trials} scenes succeeded.`
-        : repair?.missing_capability ? `${before.success}/${before.trials} succeeded: the plan needs a skill the library does not have.`
         : repair && !repair.clusters?.length ? `${before.success}/${before.trials} succeeded. The expert could not solve the failed scenes either, so there is nothing to learn from them.`
         : repair?.clusters?.every((c) => c.repair?.outcome === "rare_failure") ? `${before.success}/${before.trials} succeeded. The failures are too rare to fix reliably, so the library is unchanged.`
         : repair ? `${before.success}/${before.trials} succeeded. No fix passed the checks, so the library is unchanged.`
@@ -499,7 +526,7 @@ export default function Studio({ open }) {
               <Viewer scene={b?.scene} meshes={meshes.data} pose={player.pose} height={460} zoom={false}>
                 {showLive && b?.meta && (
                   <span className={`badge ${b.saved ? "" : "live"}`}>
-                    {b.saved ? "replay" : "live"} · {b.meta.run === "rerun" ? "after the fix" : b.meta.run === "run" ? "first run" : "repair trial"}
+                    {b.saved ? "replay" : "live"} · {b.meta.run === "rerun" ? (creating ? "with the new skill" : "after the fix") : b.meta.run === "run" ? "first run" : "repair trial"}
                     {b.meta.tag ? ` · ${nice(b.meta.tag)}` : ""} · scene {sceneNo(b.meta)} · {player.t.toFixed(1)} s
                     {player.lastSkill ? ` · ${player.lastSkill.skill} ${player.lastSkill.ok ? "✓" : "✗"}` : ""}
                     {b.done && b.result && Math.floor(b.idx) >= b.frames.length - 1 ? (b.result.success ? " · succeeded" : ` · failed: ${(b.result.labels || []).map(label).join(", ")}`) : ""}
@@ -523,13 +550,13 @@ export default function Studio({ open }) {
               <Tiles title="First run" trials={trials("run")} seeds={seeds} runningSeeds={runningSeeds("run")} onPick={(s) => pickTile("run", s)} />
               {stageEv("repair", "start") && (
                 <div className="tiles-block">
-                  <div className="card-head"><h3>Fixing the failures</h3>{phase === "repair" && <span className="pulse">working</span>}</div>
-                  {result?.repair?.missing_capability ? <p className="sub">{result.repair.message}</p>
-                    : <RepairProgress logs={logs} stageDone={!!stageEv("repair", "end")} current={repairStage} />}
+                  <div className="card-head"><h3>{creating ? `Creating a missing skill: ${nice(repairStart.capability)}` : "Fixing the failures"}</h3>
+                    {phase === "repair" && <span className="pulse">working</span>}</div>
+                  <RepairProgress logs={logs} stageDone={!!stageEv("repair", "end")} current={repairStage} stages={stageList} />
                 </div>
               )}
               {stageEv("rerun", "start") && (
-                <Tiles title="Same scenes after the fix" trials={trials("rerun")} seeds={seeds} runningSeeds={runningSeeds("rerun")} onPick={(s) => pickTile("rerun", s)} />
+                <Tiles title={creating ? "Same scenes with the new skill" : "Same scenes after the fix"} trials={trials("rerun")} seeds={seeds} runningSeeds={runningSeeds("rerun")} onPick={(s) => pickTile("rerun", s)} />
               )}
               {result && <Outcome result={result} open={open} />}
               {job.logTail && <details><summary className="bad">job log</summary><Code>{job.logTail}</Code></details>}
