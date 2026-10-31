@@ -23,9 +23,12 @@ def export_geoms(model) -> dict:
         t = GEOM_TYPES.get(int(model.geom_type[g]))
         if t is None:
             continue
+        rgba = model.geom_rgba[g]
+        if model.geom_matid[g] >= 0:                 # visual meshes take their colour from the material
+            rgba = model.mat_rgba[model.geom_matid[g]]
         item = {"body": model.body(model.geom_bodyid[g]).name, "type": t,
                 "size": model.geom_size[g].round(5).tolist(), "pos": model.geom_pos[g].round(5).tolist(),
-                "quat": model.geom_quat[g].round(5).tolist(), "rgba": model.geom_rgba[g].round(3).tolist()}
+                "quat": model.geom_quat[g].round(5).tolist(), "rgba": rgba.round(3).tolist()}
         if t == "mesh":
             item["mesh"] = model.mesh(model.geom_dataid[g]).name
         geoms.append(item)
@@ -34,8 +37,12 @@ def export_geoms(model) -> dict:
 
 class Recorder:
     def __init__(self, scene, poses: bool = True, video: bool = False, fps: int = 30,
-                 camera: str = "front", size=(480, 360)):
+                 camera: str = "front", size=(480, 360), live=None):
+        """live: a LiveWriter (sim/live.py) that streams frames and events while the episode runs."""
         self.scene, self.fps = scene, fps
+        self.live = live
+        if live is not None:
+            live.scene(export_geoms(scene.model), fps)
         self.poses = poses
         self.video = video
         self.frames, self.pose_frames, self.events = [], [], []
@@ -50,15 +57,20 @@ class Recorder:
             return
         self._next += 1.0 / self.fps
         d = self.scene.data
-        if self.poses:
-            self.pose_frames.append({"t": round(robot.t, 3), "p": d.xpos.round(4).tolist(),
-                                     "q": d.xquat.round(4).tolist()})
+        if self.poses or self.live is not None:
+            fr = {"t": round(robot.t, 3), "p": d.xpos.round(4).tolist(), "q": d.xquat.round(4).tolist()}
+            if self.poses:
+                self.pose_frames.append(fr)
+            if self.live is not None:
+                self.live.frame(fr)
         if self._renderer is not None:
             self._renderer.update_scene(d, camera=self._cam)
             self.frames.append(self._renderer.render().copy())
 
     def event(self, t, kind, **info):
         self.events.append({"t": round(t, 3), "kind": kind, **info})
+        if self.live is not None:
+            self.live.event(self.events[-1])
 
     def save(self, out_dir: pathlib.Path, stem: str, save_poses=True, save_video=True) -> dict:
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -69,7 +69,8 @@ def repair_target(cluster):
 
 
 def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8, dry_run=False, run_id=None,
-                tag=None):
+                tag=None, explorer_kwargs=None):
+    """explorer_kwargs: passed to every Explorer (e.g. {"min_fail_rate": 0.1} to skip rare failures)."""
     from .agents.llm import ModelClient
     from .investigate import Investigator
     from .search.explore import Explorer
@@ -120,13 +121,14 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
         _log(f"cluster {kind}/{skill} ({len(cl)} failures, {entry['labels']}): {len(hints)} confirmed fixes; "
              f"explorer on {task} {entry['repair_target']['kwargs']}")
         ex = Explorer(task, workers=workers, task_kwargs=kw, hints=hints, perturb=cl[0]["perturb"],
-                      run_id=f"{run_id}/explore_{kind}_{skill}")
+                      run_id=f"{run_id}/explore_{kind}_{skill}", **(explorer_kwargs or {}))
         if dry_run:
             ex.promote = lambda card, *a: ex.report.update(promoted={"card": card, "dry_run": True})
             ex.promote_routing = lambda name, *a: ex.report.update(routed={"card": name, "dry_run": True})
             ex.promote_patch = lambda ch, *a: ex.report.update(patched={"name": ch["name"], "dry_run": True})
         er = ex.run()
         entry["repair"] = {"run_id": er["run_id"], "outcome": er.get("outcome"),
+                           "rare": er.get("phases", {}).get("before", {}).get("rare"),
                            "routed": er.get("routed"), "patched": er.get("patched"),
                            "promoted": (er.get("promoted") or {}).get("card", {}).get("name")
                            if isinstance((er.get("promoted") or {}).get("card"), dict) else None}

@@ -353,7 +353,7 @@ Finish each thin path before adding breadth; keep the smoke test green and under
 | 8b | done: **Program verification**: repeated successful programs become composite cards, gated, retrieved for similar requests | a composite card promoted with lineage and reused without a new model call |
 | 8c | done: **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
 | 8d | done: Recovery inside a run (observable retry decision, next verified grasp) + auto-repair orchestrator | task success with vs without recovery (hard physics 148 -> 150/160) |
-| 9 | **Web app** over saved files | full demo replays offline |
+| 9 | done (v1): **Web app** over saved files | full demo replays offline |
 | 10 | **Spark + SAM switch-over** when the key arrives; re-run reported experiments; perception gap on ~50 episodes | headline numbers produced with Meta models |
 | 10b | **Unseen-object benchmark** (frozen set, one automatic search-and-repair cycle) | before/after on never-seen objects |
 | 11 | **Test split, once**; freeze numbers | results file frozen |

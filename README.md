@@ -48,6 +48,30 @@ Every run writes to `runs/<time>_<task>/`:
 
 Useful options: `--workers N` (parallel simulations, default CPU cores minus 1, at most 8), `--split train|dev|test`, `--reference` (also load hand-written reference cards), `--no-video`, `--no-poses`, `--success-sample 0` (no media for successes), `--set rim_pinch.depth=0.025` (override a skill parameter).
 
+## Web app
+
+The **Studio** tab is the front door: type a request -> the model's understanding (objects, goals, constraints) and
+a 3D preview of the first scene -> the plan program -> choose how many scenes and how many run in parallel -> Run.
+Episodes stream live into the 3D view while they simulate (workers run at full speed and write pose frames; the
+browser plays one scene at real time and then jumps to the freshest). If steps fail and "Fix failures automatically"
+is on, the same job checks the failures with the expert, diagnoses them, searches for a fix and gates it, then
+re-runs the same scenes, with a progress list and a Stop button. "Harder physics" (slippery, heavy objects) is a
+stress test that gives the library something to fix. Layouts that do not fit on the table are skipped, not counted.
+The other tabs are read-only views over saved runs (the 3D view replays recorded poses; no physics in the browser).
+
+```bash
+python scripts/record_demo.py                      # demo runs with pose logs (runs/demo/)
+uvicorn server.app:app --port 8000                 # API over runs/ and skill_library/; starts studio jobs
+cd web && npm install && npm run dev               # http://localhost:5173 (proxies /api to :8000)
+cd web && npm run build                            # or build once; then http://localhost:8000 serves the app
+```
+
+Tabs: Studio (prompt -> plan -> live run -> repair -> re-run), Results (headline numbers, demo replays), Task & plan
+(request, task spec, program, step trace), Replay (3D with timeline and skill trace), Investigator (ledger,
+hypotheses, one-change replays), Experiments (failure search with capability map, explorer families/tuning/gates,
+created skills, transfer), Skills (library, lineage with parameter diffs, routing evidence, patches). Every statement
+is labelled measured / hypothesis / confirmed / rejected.
+
 ## What is in here
 
 | Folder | Contents |
@@ -60,6 +84,7 @@ Useful options: `--workers N` (parallel simulations, default CPU cores minus 1, 
 | `kintsugi/runner.py` | parallel trials and saved results |
 | `kintsugi/search/` | grasp sampler (gripper fit on the point cloud), IK reachability filter, exploration, tuning, gates, promotion |
 | `skill_library/` | active skill cards: parameters, allowed ranges, checks, version lineage. `history/` keeps old versions, `primitives/` holds the explorer's search space, `reference/` holds hand-written cards used only for comparison |
+| `server/`, `web/` | FastAPI over saved files; React + Vite + react-three-fiber app |
 | `experiments/` | frozen object splits (`splits.json`) and cached regression baselines |
 
 ## Not wired yet (needs the Meta API key)

@@ -24,8 +24,9 @@ class Episode:
 
     def __init__(self, task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                  overrides=None, record_poses=False, record_video=False, perturb=None, extra_cards=None,
-                 library=None, performance=None, positions=None, patches=None, recovery=0):
-        """recovery: retries per item after a failed step (re-perceive, next verified grasp); 0 in experiments,
+                 library=None, performance=None, positions=None, patches=None, recovery=0, live=None):
+        """live: a LiveWriter streaming poses to the web app while this episode runs.
+        recovery: retries per item after a failed step (re-perceive, next verified grasp); 0 in experiments,
         so searches and gates measure the skills themselves."""
         self.t0 = time.time()
         self.recovery = int(recovery)
@@ -33,7 +34,8 @@ class Episode:
         self.allowed_grasps, self.overrides = allowed_grasps, overrides or {}
         self.scene = build_scene(task, seed=seed, perturb=perturb, positions=positions)
         self.monitor = Monitor(self.scene)
-        self.rec = Recorder(self.scene, poses=record_poses, video=record_video) if (record_poses or record_video) else None
+        self.rec = (Recorder(self.scene, poses=record_poses, video=record_video, live=live)
+                    if (record_poses or record_video or live is not None) else None)
         self.robot = Robot(self.scene, recorder=self.rec, monitor=self.monitor)
         self.robot.wait(0.3)                                   # let objects settle
         self.monitor.start_pos = {o: self.monitor.pos(o) for o in self.scene.objects}
@@ -282,13 +284,13 @@ class Episode:
 def run_episode(task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                 overrides=None, record_poses=False, record_video=False, perturb=None,
                 extra_cards=None, library=None, performance=None, positions=None,
-                patches=None, program=None, recovery=0) -> tuple[dict, Recorder]:
+                patches=None, program=None, recovery=0, live=None) -> tuple[dict, Recorder]:
     """`library` replaces the active skill library (a snapshot, e.g. the seed library); `extra_cards` adds
     cards that are not in it (exploration candidates, references); `positions` ({id: (x, y, yaw)}) rebuilds an
     exact earlier layout (one-change replays); `program` (or task["program"]) runs a model-written plan program
     instead of the planner's fixed plan."""
     ep = Episode(task, seed, perception_mode, allowed_grasps, overrides, record_poses, record_video, perturb,
-                 extra_cards, library, performance, positions, patches, recovery)
+                 extra_cards, library, performance, positions, patches, recovery, live)
     program = program or task.get("program")
     extra = None
     if program:

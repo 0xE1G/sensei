@@ -6,3 +6,5 @@ imageio
 imageio-ffmpeg
 optuna
 jsonschema
+fastapi
+uvicorn

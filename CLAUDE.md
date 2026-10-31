@@ -308,6 +308,40 @@ round started by the search (see status).
      cluster 8/10, held-out 46/48 vs 41/48 (p = 0.03); at nominal physics mugs 45 -> 47/48, cups and bowls 24/24
      unchanged (runs/20261031-050348_auto_repair). run_batch now accepts patches.
 
+4i. **Web app (first version) done**: `server/app.py` (FastAPI, read-only): /api/runs (kind by folder name,
+   nested runs by their own name), /api/run, /api/trial, /api/replay (gzip pose logs), /api/skills (cards, history,
+   primitives, composites, reference, performance, patches), /api/headlines (diagnosis over prompt v3+ runs,
+   transfer, created skill, gated repairs, failure-search trend), /api/meshes (Panda meshes from the COMPILED model:
+   MuJoCo recentres meshes, raw .obj files would be offset; base64 float32/uint32, gzip). Serves web/dist at / when
+   built. Recorder now exports material colours for meshes. `web/` (React 18 + Vite 5 + three 0.169 +
+   react-three-fiber 8 + drei 9, pinned): tabs Overview / Task & plan / Replay / Investigator / Experiments /
+   Skills; chips measured / hypothesis / confirmed / rejected; light + dark. Replay keeps MuJoCo z-up (camera
+   up = z), w-first quaternions converted; Canvas needs preserveDrawingBuffer for screenshots/video capture.
+   `scripts/record_demo.py` -> runs/demo/1..6 (bowl before/after repair, stack program, plate push, mug, bar) with
+   pose logs. `.claude/launch.json` has "api" (uvicorn :8000) and "web" (vite :5173). fastapi + uvicorn added to
+   requirements; httpx2 for TestClient was NOT installed (unknown package): test endpoints by calling functions.
+   Checked in the browser pane: all tabs load, no console errors; 3D replay renders the Panda, objects, shadows.
+4j. **Studio (web app front door) done**: prompt -> task spec + 3D preview (first layout that fits) -> plan program
+   (verified composite with the same spec hash, else the model; fixed plan if rejected) -> settings (scenes,
+   parallel workers, fix automatically, retry a failed step, harder physics = friction x0.35-0.7, mass x1.3-2) -> one
+   job at a time: `kintsugi/studio.py` run_job (run -> auto_repair on the run if robot failures -> re-run the SAME
+   seeds if the library changed), started by the server as `scripts/studio_job.py runs/<id>_studio` in its own
+   process group (Stop = taskkill /T), progress in events.jsonl (stage / trial / log with a coarse repair stage
+   parsed from the [auto_repair]/[investigate]/[explore] log prefixes / result / error). Seeds whose layout does not
+   fit are skipped (`valid_seeds`; Claude's crowded specs failed 2/8 placements), episode_error never triggers
+   repair. Live 3D: `kintsugi/sim/live.py` LiveWriter, enabled by env KINTSUGI_LIVE_DIR (spawned pool workers
+   inherit it, so every TrialPool trial streams, incl. investigator/explorer trials): per-episode jsonl (meta, scene,
+   frames, events, done) + per-worker pointer, last 3 kept; ~300 KB-1.5 MB per episode. The browser buffers and plays
+   one episode at real time, then the freshest unseen one; simulation is never slowed. A hidden browser pane pauses
+   requestAnimationFrame (looks frozen in tests; not a bug). Tested: demo prompt (Claude) 6/8 with 2 unplaceable
+   layouts (fixed since), mug + harder physics 8/8, thin cylinder + harder 16/16, balls + bowl + harder without
+   retries 14/16 -> auto_repair ran from the UI (expert check, investigator, explorer patch search).
+   That last repair took 17 min / 1679 trials for a 3/96 failure and the gates rejected everything, so the studio
+   now passes `Explorer(min_fail_rate=0.10)` (via `auto_repair(explorer_kwargs=...)`): the before phase stops as
+   outcome "rare_failure" once the Wilson 95% upper bound of the valid-failure rate is < 10% (pre-declared; off by
+   default, so experiments and earlier reports are unchanged). The UI reports it as "too rare to fix" with the
+   measured count.
+
 **Remaining, in order** (plan build order 8c onwards):
 6. done: Model-written primitives (8c), see 4g.
 7. old text kept for reference: **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->

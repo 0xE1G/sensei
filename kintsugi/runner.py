@@ -66,9 +66,14 @@ def _trial(args):
     from .tasks.specs import make_task
     from .oracle import run_oracle
     from .version import code_version, config_hash
+    from .sim.live import LiveWriter, live_dir
     cfg, seed = args
     task = cfg.get("task_spec") or make_task(cfg["task"], seed=seed, **cfg.get("task_kwargs", {}))
     want_media = cfg["save_failures"] or cfg["success_sample"] > 0
+    live = None
+    if live_dir() is not None:              # the studio is watching: stream this episode's poses
+        live = LiveWriter(live_dir(), {"seed": seed, "tag": cfg.get("tag"), "task": task.get("name"),
+                                       "run": pathlib.Path(cfg["out_dir"]).name})
     try:
         record, rec = run_episode(task, seed=seed, perception_mode=cfg["perception"],
                               allowed_grasps=cfg.get("allowed_grasps"), overrides=cfg.get("overrides"),
@@ -76,11 +81,14 @@ def _trial(args):
                               record_video=want_media and cfg["save_video"], perturb=cfg.get("perturb"),
                               extra_cards=cfg.get("extra_cards"), library=cfg.get("library"),
                               performance=cfg.get("performance"), positions=cfg.get("positions"),
-                              patches=cfg.get("patches"), recovery=cfg.get("recovery", 0))
+                              patches=cfg.get("patches"), recovery=cfg.get("recovery", 0), live=live)
     except Exception as e:                       # a broken scene is a result, not a crash
         record, rec = {"task": cfg["task"], "seed": seed, "success": False, "goals_met": 0,
                        "goals_total": len(task["goal"]), "error": f"{type(e).__name__}: {e}",
                        "subtasks": [{"label": "episode_error"}], "wall_time_s": 0.0}, None
+    if live is not None:
+        live.finish({"success": record["success"],
+                     "labels": [s["label"] for s in record["subtasks"] if s.get("label")]})
     # oracle=True: every scene; oracle="on_failure": only where the robot failed (the only case where it matters)
     if cfg.get("oracle") and not (cfg["oracle"] == "on_failure" and record["success"]):
         record["oracle"] = run_oracle(task, seed, perturb=cfg.get("perturb"))
@@ -130,15 +138,16 @@ def run_batch(task: str, n: int = 8, seed0: int = 0, workers: int | None = None,
               allowed_grasps=None, overrides=None, save_failures=True, success_sample=20, save_video=True,
               save_poses=True, run_id: str | None = None, task_kwargs=None, perturb=None, progress=True,
               extra_cards=None, seeds=None, pool: TrialPool | None = None, library=None, oracle=False,
-              task_spec=None, recovery=0, patches=None) -> dict:
+              task_spec=None, recovery=0, patches=None, performance=None, on_result=None) -> dict:
     """oracle=True also runs the solvability oracle on every scene; task_spec runs a given spec (e.g. from a prompt)
-    instead of building the named task per seed (object placement still varies with the seed)."""
+    instead of building the named task per seed (object placement still varies with the seed); on_result(r) is
+    called with each trial's result as it finishes."""
     workers = pool.workers if pool else (workers or default_workers())
     run_id = run_id or time.strftime(f"%Y%m%d-%H%M%S_{task}")
     out_dir = ROOT / "runs" / run_id
     cfg = trial_cfg(task, out_dir, perception, allowed_grasps, overrides, save_failures, success_sample,
                     save_video, save_poses, task_kwargs, perturb, extra_cards, library=library, oracle=oracle,
-                    task_spec=task_spec, recovery=recovery, patches=patches)
+                    task_spec=task_spec, recovery=recovery, patches=patches, performance=performance)
     seeds = list(seeds) if seeds is not None else list(range(seed0, seed0 + n))
     n = len(seeds)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -150,6 +159,8 @@ def run_batch(task: str, n: int = 8, seed0: int = 0, workers: int | None = None,
     try:
         for r in pool.map([(cfg, s) for s in seeds]):
             results.append(r)
+            if on_result:
+                on_result(r)
             if progress:
                 _progress(results, n)
     finally:

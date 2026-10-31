@@ -10,3 +10,7 @@ assets/
 .sync.tgz
 .sync.tar
 .sync_stamp
+
+# web app
+web/node_modules/
+web/dist/

@@ -101,8 +101,11 @@ class Explorer:
                  min_feasible: float = 0.75, run_id: str | None = None, seed: int = 0, force: bool = False,
                  library: dict | None = None, performance: dict | None = None, task_kwargs: dict | None = None,
                  patches: dict | None = None, hints: list | None = None, patch_trials: int = 20,
-                 perturb: dict | None = None):
-        """`library`: the card set every trial uses (default: the active library, snapshotted now).
+                 perturb: dict | None = None, min_fail_rate: float | None = None):
+        """`min_fail_rate`: stop early as "rare_failure" when the valid-failure rate is confidently below it (Wilson
+        upper bound < min_fail_rate): the gates need ~10 failed cases, so a rare failure costs a long search that
+        cannot pass them. None = off (experiments).
+        `library`: the card set every trial uses (default: the active library, snapshotted now).
         `performance`: routing evidence (default: skill_library/performance.json; {} for the seed library).
         `task_kwargs`: e.g. {"region": ...} to repair a failure-search cluster with region-sampled probe scenes."""
         self.task_kwargs = task_kwargs or {}
@@ -111,6 +114,7 @@ class Explorer:
         self.hints = hints or []            # confirmed one-change tests from the investigator
         self.perturb = perturb              # physics conditions to repair under (e.g. where the failures happened)
         self.patch_trials = patch_trials
+        self.min_fail_rate = min_fail_rate
         self.task = task
         self.n_before, self.n_candidates, self.per_family = n_before, n_candidates, per_family
         self.family_seeds, self.max_families = family_seeds, max_families
@@ -188,7 +192,7 @@ class Explorer:
             res += self._run([(self._cfg("before", oracle=True), s) for s in new])
             seeds += new
             n_fail = sum(not r["success"] and r["oracle"] and r["oracle"]["success"] for r in res)
-            if n_fail >= MIN_CLUSTER or len(seeds) >= 96 or n_fail == 0:
+            if n_fail >= MIN_CLUSTER or len(seeds) >= 96 or n_fail == 0 or self._rare(n_fail, len(seeds)):
                 break
             _log(f"before: {n_fail} valid failures in {len(seeds)} trials; collecting more (need {MIN_CLUSTER})")
         recs = [json.loads((self.out / "trials" / f"before_{s:06d}.json").read_text()) for s in seeds]
@@ -236,10 +240,19 @@ class Explorer:
                                           f"all solvable by the oracle "
                                           f"({', '.join(f'{l} {c}' for l, c in lab.most_common())}); "
                                           f"shape: hollow={group['hollow']} rim={group['rim']}"}
+        if top and self._rare(n_fail, len(seeds)):
+            hi = wilson(n_fail, len(seeds))[1]
+            ph["rare"] = {"valid_failures": n_fail, "trials": len(seeds), "rate_ci95_high": hi,
+                          "min_fail_rate": self.min_fail_rate}
+            _log(f"before: {n_fail} valid failures in {len(seeds)} trials: failure rate below "
+                 f"{self.min_fail_rate:.0%} (95% upper bound {hi:.1%}); too rare to repair at this budget")
         self.report["phases"]["before"] = ph
         _log(f"before: {ph['success']}/{ph['trials']} succeed; cluster: {ph.get('cluster', {}).get('statement')}")
         self._save()
         return ph.get("cluster")
+
+    def _rare(self, n_fail, n):
+        return self.min_fail_rate is not None and n_fail > 0 and wilson(n_fail, n)[1] < self.min_fail_rate
 
     def existing(self, cluster):
         """Other cards in the library whose preconditions fit the failing objects, tried on train objects."""
@@ -713,6 +726,9 @@ class Explorer:
             if not cluster:
                 _log("no failure cluster: nothing to repair")
                 self.report["outcome"] = "no_failures"
+                return self.report
+            if self.report["phases"]["before"].get("rare"):
+                self.report["outcome"] = "rare_failure"
                 return self.report
             for row in [r for r in self.existing(cluster) if r["rate"] >= 0.75][:2]:
                 perf = self._with(self._with(self.perf, cluster["skill"], cluster["evidence"]), row["card"],
