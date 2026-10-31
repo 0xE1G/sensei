@@ -184,6 +184,26 @@ def stack_by_size(seed=0) -> dict:
             "goal": goal, "constraints": []}
 
 
+def slide_plate(seed=0) -> dict:
+    """A plate (wide, thin: no grasp fits) onto a coloured zone 15-25 cm away. Needs a push."""
+    rng = np.random.default_rng(seed)
+    p = {"radius": float(rng.uniform(0.065, 0.085)), "thickness": float(rng.uniform(0.008, 0.014)),
+         "mass": float(rng.uniform(0.06, 0.2)), "friction": float(rng.uniform(0.3, 0.7)), "color": "white"}
+    for _ in range(200):
+        r, th = rng.uniform(0.42, 0.58), rng.uniform(-0.45, 0.45)
+        px, py = r * np.cos(th), r * np.sin(th)
+        d, phi = rng.uniform(0.15, 0.25), rng.uniform(-np.pi, np.pi)
+        zx, zy = px + d * np.cos(phi), py + d * np.sin(phi)
+        if 0.36 <= zx <= 0.66 and abs(zy) <= 0.30 and 0.38 <= np.hypot(zx, zy) <= 0.66:
+            break
+    return {"name": "slide_plate", "prompt": "Slide the plate onto the blue zone.",
+            "objects": [{"id": "zone", "template": "zone", "role": "target",
+                         "params": {"width": 0.16, "depth": 0.16, "color": "blue"}},
+                        {"id": "plate", "template": "plate", "role": "item", "params": p}],
+            "goal": [{"pred": "on", "obj": "plate", "target": "zone"}], "constraints": [],
+            "layout_fixed": {"plate": (float(px), float(py), 0.0), "zone": (float(zx), float(zy), 0.0)}}
+
+
 def isolate(task: dict, obj: str) -> dict:
     """The sub-task of one item: the same object (same parameters), its target, and the obstacles the task's
     constraints protect (they are part of the step's difficulty); other items are removed.
@@ -200,7 +220,7 @@ def isolate(task: dict, obj: str) -> dict:
 
 TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bowl_on_tray": bowl_on_tray,
          "cup_on_tray": cup_on_tray, "single_block": single_block, "sort_with_bowl": sort_with_bowl,
-         "probe": probe, "stack_by_size": stack_by_size}
+         "probe": probe, "stack_by_size": stack_by_size, "slide_plate": slide_plate}
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:

@@ -16,7 +16,7 @@ import ast
 import math
 import sys
 
-API_NAMES = ("find", "find_one", "pick", "place", "place_at", "next_best_grasp", "holding", "distance",
+API_NAMES = ("find", "find_one", "pick", "place", "place_at", "push", "has_skill", "next_best_grasp", "holding", "distance",
              "left_of", "right_of", "in_front_of", "behind", "say")
 SAFE_BUILTINS = {n: __builtins__[n] if isinstance(__builtins__, dict) else getattr(__builtins__, n) for n in
                  ("len", "range", "sorted", "min", "max", "abs", "sum", "enumerate", "zip", "list", "reversed",
@@ -189,6 +189,32 @@ def run_program(ep, code: str) -> dict:
         return _place({"center": [float(x), float(y)], "top_z": 0.0, "width": 0.06, "extent_xy": [0.06, 0.06]},
                       None, "place")
 
+    def push(obj, target=None, skill=None):
+        """Move an object along the table (towards `target`) with a verified push card, without grasping it."""
+        from .skills.router import score, shape_group as group
+        _budget()
+        if state["held"] is not None:
+            raise ProgramError("push needs an empty gripper; place what you are holding first")
+        cands = [n for n, c in ep.cards.items() if c.get("kind") == "push"]
+        if not cands:
+            raise ProgramError("missing capability: the library has no push skill")
+        if skill is not None and skill not in cands:
+            raise ProgramError(f"unknown push skill {skill!r}; library push skills: {cands}")
+        oid = _id(obj)
+        tid = _id(target) if target is not None else None
+        srec = ep.begin(oid, tid)
+        if srec["_desc"] is None:
+            ep.finish(srec, ep.goal_for(oid))
+            return False
+        name = skill or max(cands, key=lambda n: score(ep.performance, n, group(srec["_desc"])))
+        srec["routing"] = {"reason": "push skill", "card": name}
+        tdesc = ep.perc.perceive([tid])[tid] if tid else None
+        ep.push(srec, name, tdesc, _params(name, srec["_desc"]))
+        ep.finish(srec, ep.goal_for(oid))
+        log.append({"call": "push", "obj": oid, "target": tid, "skill": name, "ok": bool(srec["ok"]),
+                    "label": srec["label"]})
+        return bool(srec["ok"])
+
     def next_best_grasp(obj):
         from .skills.router import route
         oid = _id(obj)
@@ -203,7 +229,8 @@ def run_program(ep, code: str) -> dict:
     def holding():
         return state["held"] is not None
 
-    api = {"find": find, "find_one": find_one, "pick": pick, "place": place, "place_at": place_at,
+    api = {"find": find, "find_one": find_one, "pick": pick, "place": place, "place_at": place_at, "push": push,
+           "has_skill": lambda kind: any(c.get("kind") == kind for c in ep.cards.values()),
            "next_best_grasp": next_best_grasp, "holding": holding,
            "distance": lambda a, b: math.hypot(a.x - b.x, a.y - b.y),
            "left_of": lambda a, b: a.y > b.y, "right_of": lambda a, b: a.y < b.y,      # seen from the robot
@@ -243,4 +270,5 @@ def run_program(ep, code: str) -> dict:
         if g.get("obj") and g["obj"] not in attempted:
             ep.records.append({"obj": g["obj"], "target": g.get("target"), "trace": [], "ok": False,
                                "label": "program_error" if error else "not_attempted", "routing": None})
-    return {"program": code, "program_log": log, "program_error": error}
+    missing = error.split(":", 1)[1].strip() if error and error.startswith("missing capability") else None
+    return {"program": code, "program_log": log, "program_error": error, "missing_capability": missing}

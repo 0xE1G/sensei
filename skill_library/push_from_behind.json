@@ -1,0 +1,113 @@
+{
+  "name": "push_from_behind",
+  "version": 1,
+  "kind": "push",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    obj_x, obj_y = obj['center']\n    obj_width = obj['width']\n    \n    if target is None:\n        target_x = obj_x + p['default_push_distance'] * cos(p['default_push_direction'])\n        target_y = obj_y + p['default_push_distance'] * sin(p['default_push_direction'])\n    else:\n        target_x, target_y = target['center']\n    \n    push_vec_x = target_x - obj_x\n    push_vec_y = target_y - obj_y\n    push_angle = atan2(push_vec_y, push_vec_x)\n    push_dist = hypot(push_vec_x, push_vec_y)\n    \n    start_standoff = obj_width / 2.0 + p['behind_standoff']\n    start_x = obj_x - start_standoff * cos(push_angle)\n    start_y = obj_y - start_standoff * sin(push_angle)\n    \n    approach_height = obj['top_z'] + p['approach_height']\n    push_height = obj['top_z'] + p['push_height']\n    \n    open_gripper()\n    \n    move(start_x, start_y, approach_height, yaw=push_angle, tilt=0.0, speed=0.2)\n    \n    move(start_x, start_y, push_height, yaw=push_angle, tilt=0.0, speed=0.1)\n    \n    contact_x = obj_x - (obj_width / 2.0 - p['engagement_depth']) * cos(push_angle)\n    contact_y = obj_y - (obj_width / 2.0 - p['engagement_depth']) * sin(push_angle)\n    \n    move(contact_x, contact_y, push_height, yaw=push_angle, tilt=0.0, speed=0.05)\n    \n    total_push = push_dist + p['overtravel']\n    num_segments = max(1, int(total_push / p['segment_length']))\n    num_segments = min(num_segments, 35)\n    \n    for i in range(1, num_segments + 1):\n        progress = i / float(num_segments)\n        current_dist = progress * total_push\n        \n        push_x = contact_x + current_dist * cos(push_angle)\n        push_y = contact_y + current_dist * sin(push_angle)\n        \n        move(push_x, push_y, push_height, yaw=push_angle, tilt=0.0, speed=p['push_speed'])\n    \n    final_x, final_y, final_z = tcp()\n    move(final_x, final_y, approach_height, yaw=push_angle, tilt=0.0, speed=0.2)\n    \n    return True",
+  "description": "Pushes the object from directly behind toward the target with the gripper open, using the flat hand surface. This ensures straight-line motion and reliable contact, with engagement depth controlling how firmly the gripper contacts the object edge before the main push.",
+  "check": "object moved close to target center (within 3-4 cm)",
+  "params": {
+    "behind_standoff": {
+      "default": 0.08,
+      "range": [
+        0.05,
+        0.15
+      ],
+      "meaning": "distance behind object center to start approach"
+    },
+    "engagement_depth": {
+      "default": 0.01,
+      "range": [
+        0.005,
+        0.025
+      ],
+      "meaning": "how far into the object edge the gripper pushes before the main push"
+    },
+    "approach_height": {
+      "default": 0.05,
+      "range": [
+        0.03,
+        0.08
+      ],
+      "meaning": "height above object for safe approach"
+    },
+    "push_height": {
+      "default": 0.003,
+      "range": [
+        0.001,
+        0.008
+      ],
+      "meaning": "height above table during push"
+    },
+    "overtravel": {
+      "default": 0.05,
+      "range": [
+        0.02,
+        0.12
+      ],
+      "meaning": "extra distance to push beyond target"
+    },
+    "segment_length": {
+      "default": 0.03,
+      "range": [
+        0.02,
+        0.06
+      ],
+      "meaning": "length of each push segment"
+    },
+    "push_speed": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ],
+      "meaning": "speed during the push"
+    },
+    "default_push_distance": {
+      "default": 0.2,
+      "range": [
+        0.1,
+        0.3
+      ],
+      "meaning": "push distance when no target given"
+    },
+    "default_push_direction": {
+      "default": 0.0,
+      "range": [
+        -3.14,
+        3.14
+      ],
+      "meaning": "push direction when no target given"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261031-040016_create_push",
+      "date": "2026-10-31",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "claude_cli",
+        "model": "sonnet",
+        "prompt_version": "2",
+        "input_hash": "bc293e8d7126",
+        "cached": false,
+        "repairs": 0,
+        "latency_s": 21.45
+      },
+      "attempts": 2,
+      "capability": "push",
+      "task": "slide_plate",
+      "trials_simulated": 789,
+      "results": {
+        "held_out": [
+          0,
+          16,
+          16
+        ],
+        "p_value": 1.5e-05
+      }
+    }
+  ]
+}

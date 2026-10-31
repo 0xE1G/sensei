@@ -32,6 +32,15 @@ def describe(points: np.ndarray, table_z: float = 0.0) -> dict | None:
         return None
     pts = points[points[:, 2] > table_z + 0.002]
     if len(pts) < 15:
+        # A flat marker on the table (a coloured zone): every point is at table height. Describe its footprint.
+        if np.percentile(points[:, 2], 98) < table_z + 0.004:
+            lo, hi = np.percentile(points[:, :2], 2, axis=0), np.percentile(points[:, :2], 98, axis=0)
+            ext = hi - lo
+            return {"center": [float(v) for v in (lo + hi) / 2], "top_z": table_z + 0.001, "height": 0.001,
+                    "width": float(np.hypot(*ext)), "extent_xy": [float(ext[0]), float(ext[1])], "yaw": 0.0,
+                    "axis_yaw": 0.0, "extent_major": float(ext.max()), "extent_minor": float(ext.min()),
+                    "elongation": float(ext.max() / max(ext.min(), 1e-3)), "flat": True, "marker": True,
+                    "hollow": False, "n_points": int(len(points))}
         return None
     top = float(np.percentile(pts[:, 2], 98))
     xy = pts[:, :2]

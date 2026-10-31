@@ -102,6 +102,8 @@ def _footprint(o) -> float:
         return p["radius"] + p["handle"] + 0.01
     if o.template in ("bowl", "cup"):
         return p["radius"] + (p.get("depth", 0) * math.sin(math.radians(p.get("flare_deg", 0))) if o.template == "bowl" else 0) + 0.01
+    if o.template == "plate":
+        return p["radius"] + 0.01
     if o.template == "bar":
         return 0.5 * math.hypot(p["length"], p["width"])
     return 0.5 * max(p.get("size", 0), 2 * p.get("radius", 0)) * 1.42

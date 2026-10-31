@@ -251,7 +251,7 @@ trial (the router reads it). Grasp variants found by the explorer reuse the `fea
 | axis_centre_across | discovered | long objects (bars): close across the long axis |
 | patches | discovered | place_in.clearance 0 for tall narrow solids; clear_side for short solids near obstacles |
 | lift, place_in / drop_in | seed | transport, containers; place on another object = stacking (done via programs) |
-| push | next, as the model-written primitive demo | move an object to the table edge / into reach; push-to-edge-then-grasp |
+| push_from_behind | created by Claude (model-written primitive, gated) | slide objects no grasp can lift (plates) onto zones; program fallback after a failed pick |
 | put_down_and_regrasp | later | recovery when the first grasp pose is poor |
 | handle_grasp | later | grasp on the mug's handle feature (an explorer target) |
 | pour (tilt while holding) | post-hackathon | the same model-written-primitive mechanism; needs a particle liquid stand-in |
@@ -351,7 +351,7 @@ Finish each thin path before adding breadth; keep the smoke test green and under
 | 7 | done: **Retrieval, router, transfer** (mug with handle: 10 vs 924 trials) | transfer vs scratch numbers |
 | 8 | done: **Plan programs** (restricted interpreter, plan job, stacking) | a stacking-by-size task runs from a prompt |
 | 8b | done: **Program verification**: repeated successful programs become composite cards, gated, retrieved for similar requests | a composite card promoted with lineage and reused without a new model call |
-| 8c | **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
+| 8c | done: **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
 | 8d | Recovery inside a run (next-best verified variant / bounded recovery) | task success with vs without recovery |
 | 9 | **Web app** over saved files | full demo replays offline |
 | 10 | **Spark + SAM switch-over** when the key arrives; re-run reported experiments; perception gap on ~50 episodes | headline numbers produced with Meta models |

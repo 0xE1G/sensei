@@ -265,8 +265,30 @@ round started by the search (see status).
    -> quick check 4/4 -> reused, no plan model call, 4/4; "smallest at the bottom" (same signature, opposite goals)
    -> quick check 0/4 -> rejected -> Claude wrote a new program, 4/4.
 
+4g. **Model-written primitives done (push)**: new `plate` template (wide thin disc: no grasp fits) and task
+   `slide_plate` (plate onto a zone 15-25 cm away). Perception now describes flat markers (zones were invisible:
+   every point under 2 mm was dropped as table). `kintsugi/primitive_code.py`: sandbox with motion API move(x, y, z,
+   yaw, tilt, speed) / open_gripper / close_gripper / wait / tcp + math; code defines primitive(obj, target, p); AST
+   whitelist, no attribute access, 40 moves max; records finger width while moving. Cards kind "push", impl
+   "generated", code stored in the card; `Episode.push`; program API push(obj, target) and has_skill(kind); a
+   program asking for push without a push card fails with "missing capability: ..." (record field
+   missing_capability). Job `propose_primitive` (prompt v2 incl. gripper-as-pusher geometry; validator: code +
+   every p['...'] declared; rule stand-in = open two-finger push). `kintsugi/create_skill.py` /
+   `scripts/create_skill.py push --task slide_plate`: before -> round 1: 3 different strategies (each told the
+   others), each searched (41 candidates x 3 scenes) -> best -> Optuna (perturbed) -> gate (held-out 16 vs before,
+   McNemar, >= 70%; regression) -> if it fails, feedback (own code, tuned values, held-out failures split into
+   along/sideways error, finger opening) -> one revision. `drop` label now requires the object to have been lifted.
+   Results: rule stand-in promoted in 140 s (held-out 16/16). Claude single proposals (Sonnet x4, Opus x2) all chose
+   a closed-gripper / single-contact push and failed the gates (11, 5, 3, 4, 6, 5 of 16): the gates rejected six
+   plausible primitives. With 3 strategies + feedback: Claude's revision `push_from_behind` (open gripper, segmented
+   push from behind) -> held-out 16/16 vs 0/16 (p = 1.5e-05) -> PROMOTED (skill_library/push_from_behind.json,
+   789 trials, 10 min, runs/20261031-040016_create_push). End to end: "Move the plate onto the blue zone." ->
+   Claude spec + program (pick, next grasp, else push; plan prompt v4 rule) -> 8/8 vs fixed plan 0/8.
+   Caveat: the oracle has no push skill, so it labels these scenes unsolvable.
+
 **Remaining, in order** (plan build order 8c onwards):
-6. **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->
+6. done: Model-written primitives (8c), see 4g.
+7. old text kept for reference: **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->
    model proposes a primitive (motion-API code + parameter ranges + check) -> AST sandbox -> explorer search -> gates
    -> card `source: model-written primitive`; plan program push-to-edge-then-grasp.
 7. Recovery inside a run (8d).

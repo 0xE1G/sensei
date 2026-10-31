@@ -114,6 +114,20 @@ class Episode:
         res = L.place_in(self.robot, tdesc, p, srec["_grasp_offset"], mode=mode, slot=slot)
         return self._trace(srec, "place_in", p, ts, res)
 
+    def push(self, srec, name, tdesc, params=None) -> bool:
+        """Run a push card: model-written primitive code in the motion sandbox."""
+        from .primitive_code import run_primitive
+        ts = self.robot.t
+        srec["_tdesc"] = tdesc
+        card = self.cards[name]
+        p = L.card_params(card, params)
+        info = run_primitive(self.robot, card["code"], srec["_desc"], tdesc, p)
+        ok = info["error"] is None
+        if not ok:
+            srec["label"] = "primitive_error"
+        return self._trace(srec, name, p, ts, L.SkillResult(name, ok, "primitive_ran" if ok else "primitive_error",
+                                                            info))
+
     def finish(self, srec, goal=None):
         """Settle, check the goal (if any) and the constraints, collect evidence, go back to the ready pose."""
         if srec.get("_desc") is None:
@@ -130,7 +144,9 @@ class Episode:
         srec["place_check"] = _observed_inside(after, tdesc) if (after and tdesc) else False
         srec["ok"] = bool(goal_ok and not srec["_failed"])
         if not srec["ok"] and srec["label"] is None:
-            srec["label"] = "drop" if self.monitor.pos(obj)[2] < 0.03 and not goal_ok else "wrong_place"
+            # "drop" only for something that was lifted (a pushed plate is always low)
+            lifted = any(t["skill"] == "lift" and t["ok"] for t in srec["trace"])
+            srec["label"] = "drop" if lifted and self.monitor.pos(obj)[2] < 0.03 and not goal_ok else "wrong_place"
         # Constraint violations are pinned to the sub-task during which they first happened.
         new = [c for c in self.monitor.check_constraints(self.constraints)
                if not c["ok"] and (c["pred"], c["obj"]) not in self.violated]

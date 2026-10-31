@@ -26,6 +26,7 @@ python scripts/prompt_task.py "Stack the blocks, largest at the bottom." --progr
 python scripts/failure_search.py --from-seed                    # where does the library fail? random vs Optuna vs model, capability map
 python scripts/investigate.py --from-search runs/<id>_failsearch/report.json --library current  # why? tested causes + ledger
 python scripts/transfer.py mug --backend claude_cli               # unseen object type: library retrieval + verification vs from scratch
+python scripts/create_skill.py push --task slide_plate --backend claude_cli   # the model writes a missing skill; search + gates decide
 python scripts/explore.py sort_with_bowl --from-seed            # repair loop: bowl fails, rim grasp found, tuned, gated, promoted
 python scripts/run_task.py bowl_on_tray -n 8                    # uses the promoted rim_pinch card
 python scripts/run_task.py bowl_on_tray -n 16 --split dev       # held-out bowls

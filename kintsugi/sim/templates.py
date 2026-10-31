@@ -26,6 +26,7 @@ RANGES = {
     "block":    {"size": (0.03, 0.065), "mass": (0.02, 0.3), "friction": (0.4, 1.5)},
     "ball":     {"radius": (0.018, 0.035), "mass": (0.01, 0.2), "friction": (0.4, 1.5)},
     "cylinder": {"radius": (0.015, 0.035), "height": (0.05, 0.16), "mass": (0.02, 0.4), "friction": (0.4, 1.5)},
+    "plate":    {"radius": (0.065, 0.09), "thickness": (0.008, 0.014), "mass": (0.05, 0.3), "friction": (0.3, 0.8)},
     "bar":      {"length": (0.08, 0.22), "width": (0.02, 0.045), "height": (0.02, 0.045), "mass": (0.02, 0.3),
                  "friction": (0.4, 1.5)},
     "bowl":     {"radius": (0.055, 0.10), "depth": (0.035, 0.07), "wall": (0.004, 0.012), "flare_deg": (10, 35),
@@ -44,6 +45,7 @@ DEFAULTS = {
     "ball": {"radius": 0.025, "mass": 0.05, "friction": 1.0, "color": "orange"},
     "cylinder": {"radius": 0.025, "height": 0.10, "mass": 0.1, "friction": 1.0, "color": "white"},
     "bar": {"length": 0.15, "width": 0.03, "height": 0.03, "mass": 0.08, "friction": 1.0, "color": "yellow"},
+    "plate": {"radius": 0.075, "thickness": 0.01, "mass": 0.12, "friction": 0.5, "color": "white"},
     "bowl": {"radius": 0.075, "depth": 0.05, "wall": 0.007, "flare_deg": 22, "mass": 0.15, "friction": 1.0,
              "color": "white"},
     "cup": {"radius": 0.038, "height": 0.09, "wall": 0.006, "mass": 0.1, "friction": 1.0, "color": "white"},
@@ -135,6 +137,13 @@ def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> d
         body.add_geom(name=f"{obj.id}_g", type=G.mjGEOM_BOX, size=[s / 2] * 3, rgba=rgba, mass=p["mass"],
                       friction=fr, condim=4)
         meta.update(height=s, width=s, hollow=False, bottom_offset=-s / 2)
+    elif t == "plate":
+        # A wide flat disc: wider than the gripper opens, too thin to get the fingers under.
+        r, th = p["radius"], p["thickness"]
+        body.pos = [x, y, th / 2]
+        body.add_geom(name=f"{obj.id}_g", type=G.mjGEOM_CYLINDER, size=[r, th / 2, 0], rgba=rgba,
+                      mass=p["mass"], friction=fr, condim=4)
+        meta.update(height=th, width=2 * r, hollow=False, bottom_offset=-th / 2)
     elif t == "bar":
         L_, W_, H_ = p["length"], p["width"], p["height"]
         body.pos = [x, y, H_ / 2]

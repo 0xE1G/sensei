@@ -21,6 +21,7 @@ from kintsugi.executor import run_episode  # noqa: E402
 from kintsugi.investigate import Investigator  # noqa: E402
 from kintsugi.oracle import run_oracle  # noqa: E402
 from kintsugi.composites import applicable, signature  # noqa: E402
+from kintsugi.primitive_code import check_primitive  # noqa: E402
 from kintsugi.program import check_program  # noqa: E402
 from kintsugi.skills.library import seed_library  # noqa: E402
 from kintsugi.tasks.specs import probe  # noqa: E402
@@ -132,6 +133,15 @@ def main():
     results.append(check("composite signature/applicability",
                          sig == ["on:block->block"] * 2 and applicable({**card, "program": prog}, stack)
                          and not applicable(card, stack), str(sig)))
+
+    # Model-written primitive (rule stand-in): static check, then one plate slid onto its zone by a push card.
+    prop = client.complete("propose_primitive", {"capability": "push", "why": "smoke", "obj": {}, "target": {}}).output
+    pcard = {"name": prop["name"], "kind": "push", "version": 1, "impl": "generated", "code": prop["code"],
+             "params": prop["params"]}
+    rec_push, _ = run_episode(make_task("slide_plate", seed=0), seed=0, extra_cards={pcard["name"]: pcard},
+                              program="push(find_one(id='plate'), find_one(id='zone'))")
+    results.append(check("generated push primitive", not check_primitive(prop["code"]) and rec_push["success"],
+                         f"{rec_push['subtasks'][0]['label']} {rec_push.get('program_error')}"))
 
     # Investigator on the rule backend: a tall cylinder fails with top_grasp; the shallow-grasp cause is confirmed.
     spec = probe(7, {"template": "cylinder", "params": {"radius": 0.025, "height": 0.14}, "pos": [0.5, 0.1], "yaw": 0.0})
