@@ -66,11 +66,15 @@ cd web && npm install && npm run dev               # http://localhost:5173 (prox
 cd web && npm run build                            # or build once; then http://localhost:8000 serves the app
 ```
 
-Tabs: Studio (prompt -> plan -> live run -> repair -> re-run), Results (headline numbers, demo replays), Task & plan
-(request, task spec, program, step trace), Replay (3D with timeline and skill trace), Investigator (ledger,
-hypotheses, one-change replays), Experiments (failure search with capability map, explorer families/tuning/gates,
-created skills, transfer), Skills (library, lineage with parameter diffs, routing evidence, patches). Every statement
-is labelled measured / hypothesis / confirmed / rejected.
+Tabs: Studio (prompt -> plan -> live run -> repair or new skill -> re-run), Progress (KPI tiles; charts: failures
+per 100 scenes across repair rounds, held-out before/after per repair, reuse vs from scratch, diagnosis accuracy;
+demo replays), Episodes (3D replay with a clickable skill timeline, the plan program with the running line
+highlighted, the steps), Investigator (what it saw -> causes -> one-change test -> verdict), Experiments (grouped list
+with outcome badges; failure search heatmap, repair funnel / families / tuning / gate cards, skill-creation proposals
+side by side, transfer, auto-repair), Skills (cards with preconditions, where each works, patches, history; how the
+library grew). Every statement is labelled measured / hypothesis / confirmed / rejected (coloured dots, legend in
+the header). Reports are written by fixed Python code (model outputs are schema-validated fields inside them) and
+rendered by fixed views; every card has a crash guard that shows the raw data instead of blanking the page.
 
 ## What is in here
 

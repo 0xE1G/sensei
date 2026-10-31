@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState } from "react";
 
 // Every statement in the app carries one of these labels.
 export const STATUS = {
@@ -8,11 +8,45 @@ export const STATUS = {
   rejected: "rejected",
 };
 
+const STATUS_HELP = {
+  measured: "measured: counted in simulation by deterministic code",
+  hypothesis: "hypothesis: proposed by the model, not yet tested",
+  confirmed: "confirmed: a test in simulation supported it",
+  rejected: "rejected: a test in simulation contradicted it",
+};
+
+// With text: a labelled pill. Without: a small coloured dot whose hover says what the label means.
 export function Chip({ status, children }) {
-  return <span className={`chip chip-${status}`}>{children || status}</span>;
+  if (!children) return <span className={`dot-label dot-${status}`} title={STATUS_HELP[status] || status} aria-label={status} />;
+  return <span className={`chip chip-${status}`} title={STATUS_HELP[status] || ""}>{children}</span>;
 }
 
-export function Card({ title, status, children, actions }) {
+// A part of the page that fails to render shows a notice (and its data, if given) instead of blanking the app.
+export class Guard extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidUpdate(prev) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="guard">
+        <b>This part could not be displayed.</b> <span className="sub">{String(this.state.error.message || this.state.error).slice(0, 200)}</span>
+        {this.props.data !== undefined && (
+          <details><summary className="sub">raw data</summary><pre className="code">{JSON.stringify(this.props.data, null, 1)?.slice(0, 20000)}</pre></details>
+        )}
+      </div>
+    );
+  }
+}
+
+export function Card({ title, status, children, actions, data }) {
   return (
     <section className="card">
       {(title || status) && (
@@ -24,9 +58,13 @@ export function Card({ title, status, children, actions }) {
           </div>
         </header>
       )}
-      {children}
+      <Guard data={data}>{children}</Guard>
     </section>
   );
+}
+
+export function Details({ label = "details", children }) {
+  return <details className="more"><summary>{label}</summary>{children}</details>;
 }
 
 export function Code({ children }) {
@@ -53,7 +91,7 @@ export function useAsync(fn, deps) {
 }
 
 export function Loading({ state, children }) {
-  if (state.loading) return <p className="muted">Loading…</p>;
+  if (state.loading) return <div className="skeleton" aria-label="loading" />;
   if (state.error) return <p className="bad">Could not load: {String(state.error.message || state.error)}</p>;
   return children(state.data);
 }
@@ -69,8 +107,8 @@ export function RunPicker({ runs, kinds, value, onChange, label = "Run" }) {
         </option>
         {list.map((r) => (
           <option key={r.id} value={r.id}>
-            {r.id}
-            {r.outcome ? ` · ${r.outcome}` : ""}
+            {r.title || r.id}
+            {r.outcome ? ` · ${r.outcome.replace(/_/g, " ")}` : ""}
             {r.trials != null ? ` · ${r.success}/${r.trials}` : ""}
           </option>
         ))}

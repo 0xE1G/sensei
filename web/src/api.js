@@ -20,6 +20,7 @@ export const getTrial = (run, name) => api(`trial?${q({ run, name })}`);
 export const getReplay = (run, name) => api(`replay?${q({ run, name })}`);
 export const getSkills = () => api("skills");
 export const getHeadlines = () => api("headlines");
+export const getProgress = () => api("progress");
 export const getMeshes = () => api("meshes");
 
 export const pct = (k, n) => (n ? `${Math.round((100 * k) / n)}%` : "–");

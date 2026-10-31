@@ -56,6 +56,10 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
     goals = [g for g in task["goal"] if g["pred"] in ("inside", "on")]
     # Far objects first, so the arm does not sweep over things it already placed.
     goals.sort(key=lambda g: -math.hypot(*percepts[g["obj"]]["center"]) if percepts.get(g["obj"]) else 0)
+    # A required sequence (task "order") overrides the distance order.
+    if task.get("order"):
+        seq = task["order"]
+        goals.sort(key=lambda g: seq.index(g["obj"]) if g["obj"] in seq else len(seq))
     # A target that is itself an item to be moved (a stack base) must be placed before what goes on it.
     items, ordered = {g["obj"] for g in goals}, []
     while goals:

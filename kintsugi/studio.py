@@ -205,7 +205,8 @@ def run_job(job_dir: pathlib.Path):
             raise RuntimeError("no layout of this task fits on the table: fewer or smaller objects needed")
         before = _batch(job, task, seeds, f"{rel}/run", "run", emit)
         result["before"] = {k: before[k] for k in ("success", "trials", "failure_labels", "run_id")}
-        robot_failures = sum(v for k, v in before["failure_labels"].items() if k != "episode_error")
+        # a layout that did not fit or a plan that broke the required order is not a skill failure to repair
+        robot_failures = sum(v for k, v in before["failure_labels"].items() if k not in ("episode_error", "wrong_order"))
         if robot_failures and job.get("auto_fix"):
             call = _missing_call(job_dir / "run")
             emit("stage", stage="repair", state="start", mode="create" if call else "repair",

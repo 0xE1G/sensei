@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from ...program import check_program
 from ..llm import Job, load_prompt, register
@@ -17,7 +18,8 @@ def _task_view(task):
     """What the model needs: objects (id, kind, colour, role, size parameters), goals, constraints."""
     return {"objects": [{"id": o["id"], "kind": o["template"], "role": o.get("role", "item"),
                          "params": o.get("params", {})} for o in task["objects"]],
-            "goal": task["goal"], "constraints": task.get("constraints", [])}
+            "goal": task["goal"], "constraints": task.get("constraints", []),
+            **({"order": task["order"]} if task.get("order") else {})}
 
 
 def library_capabilities() -> list[str]:
@@ -37,7 +39,7 @@ def render(inputs):
 def validate(out, inputs) -> list[str]:
     errs = check_program(out["program"])
     ids = {o["id"] for o in inputs["task"]["objects"]}
-    if not errs and not any(i in out["program"] for i in ids) and "find(" not in out["program"]:
+    if not errs and not any(i in out["program"] for i in ids) and not re.search(r"\bfind(_one)?\(", out["program"]):
         errs.append("the program never refers to the task's objects (use find(...) or their ids)")
     return errs
 
@@ -45,6 +47,8 @@ def validate(out, inputs) -> list[str]:
 def rule(inputs) -> dict:
     """Stand-in: one pick/place per goal, ordered so every target that is itself moved is placed first."""
     goals = [g for g in inputs["task"]["goal"] if g.get("pred") in ("inside", "on")]
+    seq = inputs["task"].get("order") or []
+    goals.sort(key=lambda g: seq.index(g["obj"]) if g["obj"] in seq else len(seq))
     items = {g["obj"] for g in goals}
     done, order = set(), []
     while len(order) < len(goals):

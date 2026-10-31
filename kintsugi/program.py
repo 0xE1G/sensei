@@ -264,6 +264,23 @@ def run_program(ep, code: str) -> dict:
            "in_front_of": lambda a, b: a.x < b.x, "behind": lambda a, b: a.x > b.x,
            "say": lambda *a: log.append({"call": "say", "text": " ".join(map(str, a))})}
 
+    # Which program line each skill call came from and when it ran (simulation time), for the replay's program view.
+    call_lines = []
+
+    def _traced(name, fn):
+        def wrapper(*a, **k):
+            f = sys._getframe(1)
+            line = f.f_lineno if f.f_code.co_filename == "<plan program>" else None
+            t0 = ep.robot.t
+            try:
+                return fn(*a, **k)
+            finally:
+                if line is not None:
+                    call_lines.append({"call": name, "line": line, "t0": round(t0, 2), "t1": round(ep.robot.t, 2)})
+        return wrapper
+    for n in ("pick", "place", "place_at", "use", "push"):
+        api[n] = _traced(n, api[n])
+
     error = None
     errs = check_program(code)
     if errs:
@@ -298,5 +315,6 @@ def run_program(ep, code: str) -> dict:
             ep.records.append({"obj": g["obj"], "target": g.get("target"), "trace": [], "ok": False,
                                "label": "program_error" if error else "not_attempted", "routing": None})
     missing = error.split(":", 1)[1].strip() if error and error.startswith("missing capability") else None
-    return {"program": code, "program_log": log, "program_error": error, "missing_capability": missing,
+    return {"program": code, "program_log": log, "program_lines": call_lines, "program_error": error,
+            "missing_capability": missing,
             "missing_call": state.get("missing_call") if missing else None}

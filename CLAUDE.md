@@ -355,6 +355,33 @@ round started by the search (see status).
    runs/20261031-193322_studio/create_push/. Limit: success must be expressible with existing goal predicates
    (on/in/upright), so new capabilities are ones whose result the monitor can already check.
 
+4l. **UI redesign**: tabs Studio / Progress / Episodes / Investigator / Experiments / Skills (Task & plan + Replay
+   merged into Episodes; Overview -> Progress). `web/src/charts.jsx`: LineChart, Dumbbell, HBars, Funnel, Heatmap,
+   RateBar (SVG, hover tooltips, palette roles --s0 neutral / --s1 blue / --s2 orange from the dataviz reference,
+   one blue ramp for heatmaps). `web/src/viewer.jsx`: shared 3D viewer. `ui.jsx`: `Guard` error boundary inside every
+   Card and around every tab (shows the raw data instead of blanking the app), status chips without text render as
+   coloured dots with a hover meaning, `Details` for raw data. Server: `/api/progress` (comparable failure-search
+   rounds = 160/strategy, no obstacle, with the repairs between rounds; repairs with time and readable names;
+   diagnosis per run), run titles (`run_title`: studio prompt + phase, demo names, kind + subject + time),
+   `/api/run` returns `episodes` (outcome per replayable trial); created-skill headline only counts cards still in
+   the library. Program interpreter records `program_lines` (source line + sim time of every pick/place/use call), so
+   Episodes highlights the running line; demos re-recorded with it. Model outputs never produce UI: reports are
+   written by fixed code, views are fixed per report kind, Generic fallback shows raw JSON.
+4m. **Ordered goals + polished shell**: task spec may carry `"order": [item ids]` ("first red, then green...";
+   task_spec prompt v4, validator: goal items only, no repeats, >= 2). Episode records the sequence in which goals are
+   first reached (`completion_order`); an item reached before an earlier one is labelled `wrong_order` (with
+   `order_missing`); success also needs `order_ok`. The fixed plan sorts by the order (overrides distance); plan
+   prompt v6 + the rule stand-in follow it. wrong_order is a plan mistake, so the studio never sends it to skill
+   repair. Tested: correct order 2/2, reversed 0/2 (blue, green labelled wrong_order), fixed plan 2/2; Claude spec
+   emits the order; studio run 8/8 with order_ok. Fixed a validator bug: plan programs using only find_one(...)
+   were rejected ("never refers to the task's objects") and silently replaced by the fixed plan.
+   UI: left sidebar (Work: Studio, Episodes / Insight: Progress, Investigator, Experiments / Library: Skills; inline
+   SVG icons; label legend in the footer), page header per tab, quieter tokens, skeleton loading, previous run list
+   kept while refreshing. Studio: prompt bar with the model as a pill, numbered goal rows ("in this order"),
+   one-line settings summary, banner with a progress bar, repair/learning steps as an icon row with one activity
+   line, outcome = big numbers + one verdict, details behind "why?". Fixed run_kind: demo folders ending in
+   "_repair" were classified as auto-repair runs (only a studio job's "repair" folder is).
+
 **Remaining, in order** (plan build order 8c onwards):
 6. done: Model-written primitives (8c), see 4g.
 7. old text kept for reference: **Model-written primitives** (8c), shown on push: gap detected (flat plate no grasp fits / item out of reach) ->

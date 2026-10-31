@@ -53,6 +53,8 @@ class Episode:
         self.constraints = task.get("constraints", [])
         self.violated = set()
         self.used_cards = set()
+        self.order = list(task.get("order") or [])    # required completion sequence (item ids), if any
+        self.completed = []                            # items in the order their goal was first reached
 
     # ------------------------------------------------------------------ perception
     def describe(self, obj, exclude=()):
@@ -148,6 +150,15 @@ class Episode:
         after = self.perc.perceive([obj])[obj]
         srec["place_check"] = _observed_inside(after, tdesc) if (after and tdesc) else False
         srec["ok"] = bool(goal_ok and not srec["_failed"])
+        if goal_ok and obj not in self.completed:
+            self.completed.append(obj)
+            # Out of sequence: an item that must come earlier has not reached its goal yet.
+            if obj in self.order:
+                missing = [o for o in self.order[:self.order.index(obj)] if o not in self.completed]
+                if missing:
+                    srec["ok"] = False
+                    srec["label"] = srec["label"] or "wrong_order"
+                    srec["order_missing"] = missing
         if not srec["ok"] and srec["label"] is None:
             # "drop" only for something that was lifted (a pushed plate is always low)
             lifted = any(t["skill"] == "lift" and t["ok"] for t in srec["trace"])
@@ -260,11 +271,15 @@ class Episode:
     def record(self, extra=None) -> dict:
         final = self.monitor.check_goal(self.task["goal"])
         final_constraints = self.monitor.check_constraints(self.constraints)
+        done = [o for o in self.completed if o in self.order]
+        order_ok = done == [o for o in self.order if o in done] and len(done) == len(self.order)
         rec = {
             "task": self.task["name"], "prompt": self.task.get("prompt"), "seed": self.seed,
             "perception": self.perception_mode, "split": self.task.get("split"),
             "card_versions": {n: self.cards[n]["version"] for n in sorted(self.used_cards)},
-            "success": all(g["ok"] for g in final) and all(c["ok"] for c in final_constraints),
+            "success": all(g["ok"] for g in final) and all(c["ok"] for c in final_constraints)
+                       and (order_ok or not self.order),
+            "completion_order": self.completed, **({"order_ok": order_ok} if self.order else {}),
             "constraints": final_constraints, "goals_met": sum(g["ok"] for g in final), "goals_total": len(final),
             "subtasks": self.records, "perception_calls": self.perc.calls, "sim_time_s": round(self.robot.t, 2),
             "wall_time_s": round(time.time() - self.t0, 2),

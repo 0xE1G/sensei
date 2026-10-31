@@ -37,6 +37,7 @@ SCHEMA = {
                 "constraints": {"type": "array", "items": {
                     "type": "object", "required": ["pred", "obj"],
                     "properties": {"pred": {"enum": list(CONSTRAINTS)}, "obj": {"type": "string"}}}},
+                "order": {"type": "array", "items": {"type": "string"}},
             },
         },
     },
@@ -112,6 +113,15 @@ def validate(out, inputs) -> list[str]:
     for c in t.get("constraints", []):
         if c["obj"] not in by_id:
             errs.append(f"constraint refers to unknown object '{c['obj']}'")
+    order = t.get("order") or []
+    if order:
+        if len(set(order)) != len(order):
+            errs.append("'order' lists an item twice")
+        for i in order:
+            if i not in goal_objs:
+                errs.append(f"'order' item '{i}' has no goal; list only goal items, in the required sequence")
+        if len(order) < 2:
+            errs.append("'order' needs at least two items (omit it when there is no sequence)")
     if errs:
         return errs
     # The placer must be able to lay the scene out (reach, no overlaps).
@@ -131,6 +141,7 @@ def to_task(out, inputs) -> dict:
             for o in t["objects"]]
     return {"name": t["name"], "prompt": t.get("prompt") or inputs["prompt"], "objects": objs,
             "goal": [dict(g) for g in t["goal"]], "constraints": [dict(c) for c in t.get("constraints", [])],
+            **({"order": list(t["order"])} if t.get("order") else {}),
             "obstacles": [o["id"] for o in t["objects"] if o.get("role") == "obstacle"]}
 
 

@@ -31,11 +31,13 @@ app.add_middleware(GZipMiddleware, minimum_size=2000)
 
 KINDS = [("_explore_", "explore"), ("_explore", "explore"), ("_investigate_", "investigation"), ("_failsearch", "failure_search"), ("_investigate", "investigation"),
          ("_create_", "create_skill"), ("_transfer_", "transfer"), ("_verify_program", "verify_program"),
-         ("_auto_repair", "auto_repair"), ("_repair", "auto_repair"), ("_measure_recovery", "recovery"), ("_quick_check", "quick_check")]
+         ("_auto_repair", "auto_repair"), ("_measure_recovery", "recovery"), ("_quick_check", "quick_check")]
 
 
 def run_kind(name: str) -> str:
     """By the run folder's name; nested runs (auto_repair/explore_mug_...) by their own folder name."""
+    if name.split("/")[-1] == "repair":              # a studio job's repair folder
+        return "auto_repair"
     last = "_" + name.split("/")[-1]
     for probe in (last, name):
         for key, kind in KINDS:
@@ -74,6 +76,30 @@ def _run_dirs():
     return out
 
 
+KIND_TITLES = {"explore": "Repair search", "investigation": "Diagnosis", "failure_search": "Failure search",
+               "create_skill": "Skill creation", "transfer": "Transfer", "task": "Task run", "auto_repair": "Auto-repair",
+               "verify_program": "Program check", "recovery": "Recovery test", "quick_check": "Quick check"}
+STUDIO_PHASES = {"run": "first run", "rerun": "after the fix", "repair": "repair"}
+
+
+def run_title(rel: str, kind: str, task=None) -> str:
+    """A readable name for a run folder (the id stays the key)."""
+    parts = rel.split("/")
+    when = re.match(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})", parts[0])
+    stamp = f"{when.group(3)}.{when.group(2)} {when.group(4)}:{when.group(5)}" if when else ""
+    if parts[0].endswith("_studio"):
+        try:
+            prompt = _read(RUNS / parts[0] / "job.json")["prompt"]
+        except (OSError, ValueError, KeyError):
+            prompt = "studio"
+        phase = STUDIO_PHASES.get(parts[1], parts[1].replace("_", " ")) if len(parts) > 1 else ""
+        return f"Studio · {prompt[:60]} · {phase}" + (f" · {parts[2].replace('_', ' ')}" if len(parts) > 2 else "")
+    if parts[0] == "demo":
+        return "Demo · " + re.sub(r"^\d+_", "", parts[-1]).replace("_", " ")
+    what = (task or re.sub(r"^\d{8}-\d{6}_?", "", parts[-1])).replace("_", " ")
+    return f"{KIND_TITLES.get(kind, kind)} · {what} · {stamp}".strip(" ·")
+
+
 def _summary(d: pathlib.Path) -> dict:
     rel = d.relative_to(RUNS).as_posix()
     m = re.match(r"(\d{8})-(\d{6})", d.name) or re.match(r"(\d{8})-(\d{6})", rel)
@@ -88,8 +114,13 @@ def _summary(d: pathlib.Path) -> dict:
         if item["has_report"]:
             r = _read(d / "report.json")
             item.update(outcome=r.get("outcome"), task=item.get("task") or r.get("task") or r.get("template"))
+            if item["kind"] == "failure_search":
+                item["task"] = f"{r.get('library')} library" + (" · with a bottle nearby" if r.get("obstacle") else "")
+            elif item["kind"] == "explore" and (r.get("task_kwargs") or {}).get("region"):
+                item["task"] = f"{r['task_kwargs']['region']['template']}s (probe region)"
     except Exception:
         pass
+    item["title"] = run_title(rel, item["kind"], item.get("task") if item["kind"] in ("task", "failure_search", "explore") else None)
     return item
 
 
@@ -112,6 +143,16 @@ def get_run(id: str):
     out["trials"] = sorted(p.stem for p in (d / "trials").glob("*.json")) if (d / "trials").exists() else []
     out["replays"] = sorted(p.name.replace("_poses.json.gz", "") for p in (d / "media").glob("*_poses.json.gz")) \
         if (d / "media").exists() else []
+    out["title"] = run_title(id, out["kind"])
+    # Outcome of each replayable episode, for the episode picker.
+    out["episodes"] = []
+    for name in out["replays"][:300]:
+        try:
+            t = _read(d / "trials" / f"{name}.json")
+            out["episodes"].append({"name": name, "seed": t.get("seed"), "success": t.get("success"),
+                                    "labels": [s["label"] for s in t.get("subtasks", []) if s.get("label")]})
+        except (OSError, ValueError):
+            out["episodes"].append({"name": name})
     return out
 
 
@@ -207,7 +248,8 @@ def headlines():
                                      for d, r in fs if r.get("strategies") and len(r["strategies"]) == 3]
         cs = [_read(d / "report.json") for d in latest.get("create_skill", [])]
         prom = [r for r in cs if r.get("outcome") == "promoted" and r.get("phases", {}).get("proposals", [{}])[0]
-                .get("meta", {}).get("backend") == "claude_cli"]
+                .get("meta", {}).get("backend") == "claude_cli"
+                and (LIB / f"{r['promoted']['card']}.json").exists()]        # only skills still in the library
         if prom:
             r = prom[-1]
             g = r["phases"]["gate"]["held_out"]
@@ -216,6 +258,60 @@ def headlines():
                                     "rejected_proposals": sum(1 for x in cs if x.get("outcome") != "promoted")}
     except Exception as e:                           # headlines are best-effort; the panels show the details
         out["error"] = str(e)
+    return out
+
+
+def _when(run_id: str):
+    """'20261031-013109' -> '2026-10-31 01:31' (from any component of the run id)."""
+    m = re.search(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", run_id)
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)} {m.group(4)}:{m.group(5)}" if m else None
+
+
+def _repair_name(r: dict) -> str:
+    card = r["card"]
+    if r["outcome"] == "patched" and isinstance(card, dict):
+        return "patch " + ", ".join(f"{k} = {v}" for k, v in card.items())
+    if r["outcome"] == "routed":
+        return f"use {str(card).replace('route:', '')}"
+    return f"new skill {card}"
+
+
+@app.get("/api/progress")
+def progress():
+    """Time-ordered data for the Progress charts: failure-search rounds, gated repairs, transfer, diagnosis.
+    Everything comes from saved reports; nothing here is computed by a model."""
+    h = headlines()
+    out = {"kpis": {}, "search": [], "repairs": [], "transfer": h.get("transfer"), "created": h.get("created_skill"),
+           "diagnosis": None}
+    # Failure-search rounds that are comparable: full search space, 160 trials per strategy, no obstacle.
+    for d in sorted(RUNS.glob("*_failsearch")):
+        try:
+            r = _read(d / "report.json")
+        except (OSError, ValueError):
+            continue
+        st = r.get("strategies", {})
+        if r.get("budget_per_strategy") != 160 or r.get("obstacle") or "random" not in st or "model" not in st:
+            continue
+        out["search"].append({"run": d.name, "when": _when(d.name), "library": r.get("library"),
+                              "per100": {k: v["metrics"]["valid_failures_per_100"] for k, v in st.items()},
+                              "clusters": [c["key"] for c in r.get("clusters", [])][:4]})
+    for rp in h.get("repairs", []):
+        out["repairs"].append({**rp, "when": _when(rp["run"]), "name": _repair_name(rp)})
+    out["repairs"].sort(key=lambda r: r["when"] or "")
+    # Which repairs happened between two search rounds (annotations on the trend line).
+    for i, s in enumerate(out["search"]):
+        prev = out["search"][i - 1]["when"] if i else ""
+        s["after_repairs"] = [r["name"] for r in out["repairs"] if prev < (r["when"] or "") <= s["when"]]
+    dg = h.get("diagnosis")
+    if dg:
+        out["diagnosis"] = {k: dg[k] for k in ("top1_correct", "diagnosed", "confirmed", "rejected", "cases_with_confirmed")}
+        out["diagnosis"]["per_run"] = [{**x, "when": _when(x["run"])} for x in dg["per_run"]]
+    out["kpis"] = {
+        "repairs": sum(r["outcome"] in ("promoted", "patched", "routed") for r in out["repairs"]),
+        "search_first": out["search"][0]["per100"]["random"] if out["search"] else None,
+        "search_last": out["search"][-1]["per100"]["random"] if out["search"] else None,
+        "skills": len([p for p in LIB.glob("*.json") if p.stem not in ("performance", "patches")]),
+    }
     return out
 
 
