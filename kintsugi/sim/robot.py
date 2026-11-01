@@ -34,6 +34,9 @@ def down_rotation(yaw: float = 0.0, tilt: float = 0.0, tilt_axis: str = "x") -> 
     return R
 
 
+GRIP_LOST_WIDTH = 0.003      # m: fingers closer than this hold nothing (same threshold as the place check)
+
+
 class Robot:
     def __init__(self, scene, recorder=None, monitor=None):
         self.scene = scene
@@ -108,8 +111,11 @@ class Robot:
         self.ik_error = float(np.linalg.norm(err[:3]))
         return self.cfg.q[:7].copy()
 
-    def move_to(self, pos, R, speed: float = 0.25, settle: float = 0.25, tol: float = 0.006) -> dict:
-        """Straight-line Cartesian move of the TCP to (pos, R). Returns reached/err info."""
+    def move_to(self, pos, R, speed: float = 0.25, settle: float = 0.25, tol: float = 0.006,
+                watch_grip: bool = False) -> dict:
+        """Straight-line Cartesian move of the TCP to (pos, R). Returns reached/err info.
+        watch_grip: the hand carries something; if the finger gap collapses (closed on nothing: the object slipped
+        out) the move stops right there and returns lost_grip=True with the time (proprioception only)."""
         self._sync_cfg()
         p0, R0 = self.tcp_pose()
         pos = np.asarray(pos, float)
@@ -126,6 +132,9 @@ class Robot:
             qa = self._ik(p, Ri, iters=3)
             self.d.ctrl[self.arm_act] = qa
             self.step()
+            if watch_grip and self.finger_width() < GRIP_LOST_WIDTH:
+                return {"reached": False, "lost_grip": True, "lost_at": round(self.t, 2),
+                        "pos_err": float(np.linalg.norm(self.tcp_pose()[0] - pos)), "ik_err": self.ik_error}
         qa = self._ik(pos, R, iters=20)
         self.d.ctrl[self.arm_act] = qa
         self.wait(settle)

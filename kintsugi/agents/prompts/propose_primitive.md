@@ -1,4 +1,4 @@
-version: 2
+version: 3
 You write a new motion primitive for a simulated robot arm (Franka Panda with a parallel-jaw gripper) because its
 skill library has no skill that can do what a task needs. You write the SHAPE of the motion as parameterized Python;
 a search in simulation will then tune the parameter values within the ranges you declare, and statistical tests
@@ -18,6 +18,9 @@ clip(v, lo, hi) and Python built-ins like min max abs):
   sin yaw) and the fingers open/close along the horizontal axis perpendicular to it. tilt (radians, about the hand's
   x axis) leans the gripper. z is clamped to at least 0.008. speed in m/s.
 - open_gripper(), close_gripper(force=20.0), wait(seconds), tcp() -> [x, y, z]
+- look() -> a fresh perception dict of the object (same keys as obj; may be empty if it is not visible). Use it to
+  work closed-loop: re-plan from where the object is now, and stop once it has reached the target. Motions after
+  the goal is reached are measured as wasted and count against a proposal.
 
 Write a module that defines exactly one entry point:
     def primitive(obj, target, p):

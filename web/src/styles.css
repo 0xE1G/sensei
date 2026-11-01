@@ -776,9 +776,8 @@ h1, h2, h3, .page-head h2, .kpi-value, .big, .banner-text, .exp-header h2, .side
 
 /* ================================================================ brand mark */
 .logo-mark { width: 34px; height: 34px; flex: none; }
-.logo-mark rect { fill: #141416; }
-.logo-mark circle { fill: none; stroke: #f2f2f3; stroke-width: 2.1; }
-.logo-mark path { fill: none; stroke: #e2b552; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+.logo-mark rect { fill: #0d0d0f; }
+.logo-mark path { fill: none; stroke: #f4f4f5; stroke-width: 1.6; }
 @media (prefers-color-scheme: dark) { .logo-mark rect { fill: #1d1d21; } }
 .sidebar .brand h1 { font-size: 14px; letter-spacing: 0.22em; font-weight: 700; }
 

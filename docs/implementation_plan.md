@@ -354,6 +354,7 @@ Finish each thin path before adding breadth; keep the smoke test green and under
 | 8c | done: **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
 | 8d | done: Recovery inside a run (observable retry decision, next verified grasp) + auto-repair orchestrator | task success with vs without recovery (hard physics 148 -> 150/160) |
 | 9 | done (v1): **Web app** over saved files | full demo replays offline |
+| 9b | **Base + user skill libraries**: the shipped library (`skill_library/`) stays read-only; every discovery (cards, versions, patches, routing evidence, composites) goes to a local git-ignored user library; the loader merges both (user overrides base); Skills tab shows base vs local; export/import of skill packs; a skill enters the base library only after re-passing the gates on the reference held-out set | a fresh clone plus a local repair shows the new skill as "local", `git status` stays clean, a `git pull` of the base never conflicts |
 | 10 | **Spark + SAM switch-over** when the key arrives; re-run reported experiments; perception gap on ~50 episodes | headline numbers produced with Meta models |
 | 10b | **Unseen-object benchmark** (frozen set, one automatic search-and-repair cycle) | before/after on never-seen objects |
 | 11 | **Test split, once**; freeze numbers | results file frozen |

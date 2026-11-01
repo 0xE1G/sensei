@@ -306,8 +306,16 @@ def place_in(robot, target_desc, p, grasp_offset, mode="place", slot=(0.0, 0.0))
         z_rel = top + p["drop_height"] + grasp_offset
     else:
         z_rel = top + p["clearance"] + grasp_offset
-    r1 = robot.move_to([*c, SAFE_Z], R, speed=p["speed"])
-    r2 = robot.move_to([*c, max(z_rel, MIN_TCP_Z)], R, speed=0.15)
+    r1 = robot.move_to([*c, SAFE_Z], R, speed=p["speed"], watch_grip=True)
+    if r1.get("lost_grip"):
+        # The object slipped out on the way: stop here (no lowering, no opening over an empty target); the
+        # episode labels it and recovery can re-perceive and grasp again.
+        return SkillResult("place_in" if mode == "place" else "drop_in", False, "object_lost_in_transport",
+                           {"reached": False, "lost_at": r1["lost_at"], "release_z": None})
+    r2 = robot.move_to([*c, max(z_rel, MIN_TCP_Z)], R, speed=0.15, watch_grip=True)
+    if r2.get("lost_grip"):
+        return SkillResult("place_in" if mode == "place" else "drop_in", False, "object_lost_in_transport",
+                           {"reached": False, "lost_at": r2["lost_at"], "release_z": None})
     holding = robot.finger_width() > 0.003
     robot.open(wait=0.5)
     robot.move_to([*c, SAFE_Z], R_down, speed=0.3)

@@ -179,6 +179,7 @@ function CreateSkill({ rep }) {
                 {s && <>
                   <div className="kv-line"><span>Best setting</span><RateBar k={best.success} n={best.trials} /></div>
                   <div className="kv-line"><span>Working settings</span><RateBar k={s.candidates.filter((c) => c.success > 0).length} n={s.candidates.length} /></div>
+                  {best.wasted != null && <div className="kv-line"><span>Idle motion (best)</span><span className={best.wasted > 0.2 ? "bad" : ""}>{Math.round(100 * best.wasted)}%</span></div>}
                 </>}
                 <div className="sub">written by {p.meta?.backend}{p.feedback ? " · after feedback" : ""}</div>
                 <Details label="Code"><Code>{p.card.code}</Code></Details>
@@ -193,6 +194,7 @@ function CreateSkill({ rep }) {
           <div className="gate-checks wide">
             <div><span>Held-out</span><span className="beforeafter"><RateBar k={ph.gate.held_out.before} n={ph.gate.held_out.trials} /> → <RateBar k={ph.gate.held_out.success} n={ph.gate.held_out.trials} /></span><span className="sub">{fmtP(ph.gate.held_out.p_value)}</span></div>
             <div><span>Regression</span><span>{ph.gate.no_regression.pass ? "none" : "found"}</span></div>
+            {ph.gate.held_out.wasted_frac != null && <div><span>Idle motion</span><span>{Math.round(100 * ph.gate.held_out.wasted_frac)}% of motion time after the goal was met</span></div>}
           </div>
         </Card>
       )}

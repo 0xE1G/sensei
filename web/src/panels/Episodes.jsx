@@ -154,7 +154,14 @@ function Episode({ d }) {
                     {(st.trace || []).map((s, j) => (
                       <button key={j} className={`skill-pill ${s.ok ? "" : "fail"}`} onClick={() => seek(s.t0)} title={s.check}>{s.skill}</button>
                     ))}
-                    {st.label && <span className="step-label">{nice(st.label)}</span>}
+                    {st.label && <span className="step-label">{(st.trace || []).find((s) => s.check === "object_lost_in_transport")
+                      ? `slipped while carried (${(st.trace || []).find((s) => s.check === "object_lost_in_transport").info?.lost_at} s)` : nice(st.label)}</span>}
+                    {(st.trace || []).map((s, j) => {
+                      const a = s.info?.audit;
+                      return a && a.wasted_frac > 0.2 ? (
+                        <span key={`w${j}`} className="chip chip-hypothesis" title={`${a.idle_moves_after_goal} motions after the goal was met moved nothing (${a.wasted_s} of ${a.total_s} s)`}>
+                          redundant motion {Math.round(100 * a.wasted_frac)}%</span>) : null;
+                    })}
                   </div>
                 </div>
               </li>

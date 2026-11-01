@@ -406,7 +406,8 @@ round started by the search (see status).
    Skills timeline: scrollbar hidden, arrow buttons + edge fades appear only when it overflows.
    Studio: prompt box (auto-growing textarea, model pill and round send button inside, keyboard hint),
    suggestion chips; "Recent runs" strip always visible, the running job or else the newest run is selected on
-   open, the selected run is highlighted. Logo: white ring (bowl) crossed by a gold seam on a dark tile
+   open, the selected run is highlighted. Logo (user pick 2026-11-01): striped diamond, white horizontal stripes clipped to a
+   diamond on a near-black tile (earlier: white ring crossed by a gold seam)
    (`web/public/logo.svg`, favicon, inline in the sidebar; server route /logo.svg for the built app).
    Navigation moved to a sticky translucent top bar (logo + wordmark, nav groups Work / Insight / Library split
    by thin separators); content uses the full width; sticky side columns sit at top 76 px. `ScrollRow` (ui.jsx):
@@ -425,6 +426,25 @@ round started by the search (see status).
 7. Recovery inside a run (8d).
 8. **Web app** over saved files (task & scene with program, replay, investigator ledger, experiments monitor +
    capability map, results with promotion diff and gate p-values, skill graph / lineage, export).
+8f. **Execution checks (user-reported oddities, 2026-10-31)**:
+   - Grip monitoring: `Robot.move_to(watch_grip=True)` stops the motion when the finger gap collapses
+     (< GRIP_LOST_WIDTH 3 mm, proprioception only); place_in carries and lowers with it and returns
+     `object_lost_in_transport` (+ lost_at) instead of lowering and opening over an empty target; the episode
+     labels it `drop`, recovery re-grasps. Cause found: under harder physics a bowl slipped while carried and
+     place_in still opened over the tray (scene 11, balls+bowl run); replay now stops at t=40.1 s.
+   - Wasted-motion audit for model-written primitives: run_primitive calls on_move after every motion; the
+     episode records (simulator, evaluation only) object displacement and whether the goal was already met;
+     `motion_audit`: idle motion after the goal (moved nothing, final lift-away excluded) = wasted_frac, and
+     overshoot (still moved the object) separately. Runner results carry wasted_frac; SkillCreator search ranks
+     equal success by less waste, tuning objective = success - 0.1 x waste, gate reports it, gate feedback tells
+     the model; Episodes shows "redundant motion N%", Experiments shows idle motion per proposal and gate.
+     Cause found: Claude's straddle push did two open-loop passes from the start pose, the second through empty air
+     (48-50% idle); push_from_behind 0% idle (12 cm overshoot inside the zone).
+   - Motion API `look()`: fresh perception of the object, so primitives can work closed-loop (prompt v3).
+8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
+   `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
+   skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked
+   `skill_library/`, so local learning and library updates can collide.
 9. **Spark + SAM switch-over**, re-run reported experiments on Meta models, perception gap on ~50 episodes.
 10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
    primitive + particle liquid), video imitation, curriculum, self-proposed tasks.

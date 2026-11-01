@@ -17,7 +17,7 @@ import math
 
 from .program import ALLOWED_NODES, SAFE_BUILTINS
 
-MOTION_API = ("move", "open_gripper", "close_gripper", "wait", "tcp")
+MOTION_API = ("move", "open_gripper", "close_gripper", "wait", "tcp", "look")
 MATH = {"sin": math.sin, "cos": math.cos, "atan2": math.atan2, "hypot": math.hypot, "sqrt": math.sqrt,
         "pi": math.pi, "radians": math.radians, "degrees": math.degrees,
         "clip": lambda v, lo, hi: max(lo, min(hi, v))}
@@ -57,8 +57,10 @@ def check_primitive(code: str) -> list[str]:
     return sorted(set(errs))
 
 
-def run_primitive(robot, code: str, obj: dict, target: dict | None, p: dict) -> dict:
-    """Execute a primitive on the robot. Returns {moves, reached, error}."""
+def run_primitive(robot, code: str, obj: dict, target: dict | None, p: dict, on_move=None, look=None) -> dict:
+    """Execute a primitive on the robot. Returns {moves, reached, error}.
+    on_move(t0, t1): called after every motion (the episode audits it); look(): a fresh perception of the object,
+    so a primitive can work closed-loop (e.g. stop pushing once the object has arrived)."""
     from .sim.robot import down_rotation
     stats = {"moves": 0, "reached": 0, "error": None, "finger_width_mm_while_moving": []}
 
@@ -67,8 +69,11 @@ def run_primitive(robot, code: str, obj: dict, target: dict | None, p: dict) -> 
         if stats["moves"] > MAX_MOVES:
             raise PrimitiveError(f"more than {MAX_MOVES} moves")
         z = max(0.008, float(z))                      # never drive the fingertips into the table
+        t0 = robot.t
         r = robot.move_to([float(x), float(y), z], down_rotation(float(yaw), tilt=float(tilt), tilt_axis="x"),
                           speed=float(min(max(speed, 0.02), 0.5)))
+        if on_move:
+            on_move(t0, robot.t)
         stats["reached"] += int(r["reached"])
         stats["finger_width_mm_while_moving"].append(round(1000 * robot.finger_width()))
         return bool(r["reached"])
@@ -76,7 +81,8 @@ def run_primitive(robot, code: str, obj: dict, target: dict | None, p: dict) -> 
     api = {"move": move, "open_gripper": lambda: robot.open(),
            "close_gripper": lambda force=20.0: robot.close(force=float(min(max(force, 5), 40))),
            "wait": lambda s: robot.wait(float(min(max(s, 0.0), 2.0))),
-           "tcp": lambda: [float(v) for v in robot.tcp_pose()[0]], **MATH}
+           "tcp": lambda: [float(v) for v in robot.tcp_pose()[0]],
+           "look": lambda: dict(look() or {}) if look else dict(obj), **MATH}
     errs = check_primitive(code)
     if errs:
         stats["error"] = "static check failed: " + "; ".join(errs)

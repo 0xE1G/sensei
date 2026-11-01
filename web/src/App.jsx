@@ -45,9 +45,9 @@ export default function App() {
         <div className="topbar-inner">
           <div className="brand">
             <svg className="logo-mark" viewBox="0 0 32 32" aria-label="Kintsugi">
-              <rect width="32" height="32" rx="9" />
-              <circle cx="16" cy="16" r="8.6" />
-              <path d="M12.2 7.9 L15.4 13.2 L13.3 16.6 L18.4 19.9 L20.4 24.2" />
+              <defs><clipPath id="logo-diamond"><path d="M16 6L26 16L16 26L6 16Z" /></clipPath></defs>
+              <rect width="32" height="32" rx="8" />
+              <path clipPath="url(#logo-diamond)" d="M4 8H28M4 11.5H28M4 15H28M4 18.5H28M4 22H28M4 25.5H28" />
             </svg>
             <h1>KINTSUGI</h1>
           </div>

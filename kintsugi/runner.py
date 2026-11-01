@@ -109,6 +109,9 @@ def _trial(args):
             "goals_total": record["goals_total"], "labels": [s["label"] for s in record["subtasks"] if s.get("label")],
             "subtask_ok": {s["obj"]: s["ok"] for s in record["subtasks"] if "obj" in s},
             "grasp": {s["obj"]: s["trace"][0]["skill"] for s in record["subtasks"] if s.get("trace")},
+            # wasted motion of model-written primitives (motion after the goal was met), 0 if none ran
+            "wasted_frac": max([t["info"]["audit"]["wasted_frac"] for s in record["subtasks"] for t in s.get("trace", [])
+                                if isinstance(t.get("info", {}).get("audit"), dict)] or [0.0]),
             "oracle": ({k: record["oracle"][k] for k in ("success", "subtask_ok")} if record.get("oracle") else None),
             "wall_time_s": record["wall_time_s"]}
 

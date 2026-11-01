@@ -119,6 +119,8 @@ class Episode:
         srec["_tdesc"] = tdesc
         p = L.card_params(self.cards["place_in"], params)
         res = L.place_in(self.robot, tdesc, p, srec["_grasp_offset"], mode=mode, slot=slot)
+        if res.check == "object_lost_in_transport":
+            srec["label"] = "drop"                      # slipped out while carried (time in the trace info)
         return self._trace(srec, "place_in", p, ts, res)
 
     def push(self, srec, name, tdesc, params=None) -> bool:
@@ -128,7 +130,22 @@ class Episode:
         srec["_tdesc"] = tdesc
         card = self.cards[name]
         p = L.card_params(card, params)
-        info = run_primitive(self.robot, card["code"], srec["_desc"], tdesc, p)
+        obj, goal = srec["obj"], self.goal_for(srec["obj"])
+        audit, last = [], [self.monitor.pos(obj)]
+
+        def on_move(t0, t1):
+            # Evaluation only (simulator state, never shown to the primitive): did this motion move the object,
+            # and was the goal already met before it started?
+            pos = self.monitor.pos(obj)
+            met_before = bool(audit and audit[-1]["goal_met"])
+            met = bool(goal) and self.monitor.check_goal([goal])[0]["ok"]
+            audit.append({"t0": round(t0, 2), "t1": round(t1, 2), "moved_cm": round(100 * float(np.linalg.norm(pos[:2] - last[0][:2])), 1),
+                          "goal_met": met, "after_goal": met_before})
+            last[0] = pos
+
+        info = run_primitive(self.robot, card["code"], srec["_desc"], tdesc, p, on_move=on_move,
+                             look=lambda: self.perc.perceive([obj])[obj])
+        info["audit"] = motion_audit(audit)
         ok = info["error"] is None
         if not ok:
             srec["label"] = "primitive_error"
@@ -316,6 +333,23 @@ def run_episode(task: dict, seed: int = 0, perception_mode: str = "sim", allowed
     record = ep.record(extra)
     ep.close()
     return record, ep.rec
+
+
+def motion_audit(moves: list[dict]) -> dict:
+    """Wasted motion of a primitive, measured in simulation after the fact.
+    idle: motions after the goal was already met that moved nothing (repeating a push through empty air); the
+    final lift-away is excluded. overshoot: motions after the goal that still moved the object (it stays a goal
+    only if it is still met at the end, which the success check covers)."""
+    total = sum(m["t1"] - m["t0"] for m in moves) or 1e-6
+    after = [m for m in moves if m["after_goal"]]
+    if after and after[-1]["moved_cm"] < 0.5:
+        after = after[:-1]                                   # the last lift-away
+    idle = [m for m in after if m["moved_cm"] < 0.5]
+    push = [m for m in after if m["moved_cm"] >= 0.5]
+    wasted = sum(m["t1"] - m["t0"] for m in idle)
+    return {"moves": len(moves), "total_s": round(total, 2), "wasted_s": round(wasted, 2),
+            "wasted_frac": round(wasted / total, 3), "idle_moves_after_goal": len(idle),
+            "overshoot_moves": len(push), "overshoot_cm": round(sum(m["moved_cm"] for m in push), 1), "per_move": moves}
 
 
 def _public(srec):

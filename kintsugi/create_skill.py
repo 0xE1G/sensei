@@ -27,6 +27,8 @@ from .search.explore import ALPHA, REGRESSION_TASKS, TUNE_PERTURB, mcnemar_p
 from .skills.library import LIB_DIR, save_card
 from .tasks.splits import split_seeds
 
+WASTE_WEIGHT = 0.1     # tuning objective: success rate - 0.1 x wasted-motion fraction (a tie-breaker)
+
 CAPABILITIES = {
     "push": {"kind": "push",
              "description": "move an object along the table to a target location without grasping it (the object "
@@ -176,9 +178,10 @@ class SkillCreator:
         for i, c in enumerate(cands):
             rr = [res[(f"a{attempt}_cand{i}", s)] for s in seeds]
             rows.append({"id": i, "params": {k: round(v, 4) for k, v in c.items()},
+                         "wasted": round(float(np.mean([r.get("wasted_frac", 0.0) for r in rr])), 3),
                          "success": sum(r["success"] for r in rr), "trials": len(rr),
                          "labels": dict(collections.Counter(l for r in rr for l in r["labels"]))})
-        rows.sort(key=lambda r: -r["success"])
+        rows.sort(key=lambda r: (-r["success"], r["wasted"]))     # equal success: less wasted motion first
         self.report["phases"].setdefault("search", []).append({"attempt": attempt, "seeds": seeds, "candidates": rows})
         _log(f"search (attempt {attempt}): best {rows[0]['success']}/{rows[0]['trials']}, "
              f"{sum(r['success'] > 0 for r in rows)}/{len(rows)} candidates succeed at least once")
@@ -226,7 +229,9 @@ class SkillCreator:
                          + (f"; finger opening during the moves (mm): {fw}" if fw else "")
                          + (f"; code error {info.get('error')}" if info.get("error") else ""))
         h = gate["held_out"]
-        return (f"It succeeded on {h['success']}/{h['trials']} held-out scenes (needs 70%). Failures:\n"
+        waste = (f"\nWasted motion: {100 * h.get('wasted_frac', 0):.0f}% of the motion time came after the object had "
+                 "already reached the target; use look() to stop once it has arrived." if h.get("wasted_frac", 0) > 0.1 else "")
+        return (f"It succeeded on {h['success']}/{h['trials']} held-out scenes (needs 70%).{waste} Failures:\n"
                 + "\n".join(lines) + f"\nTuned values: { {k: v['default'] for k, v in card['params'].items()} }\n"
                 f"Your previous code:\n{card['code']}\nRevise the motion so it works reliably.")
 
@@ -244,7 +249,8 @@ class SkillCreator:
             for t in ts:
                 p = {k: t.suggest_float(k, *card["params"][k]["range"]) for k in names}
                 rr = self._run_program(f"tune{t.number}", card, p, seeds, TUNE_PERTURB)
-                v = sum(r["success"] for r in rr) / len(rr)
+                # success first; wasted motion only breaks ties (penalty < one success out of tune_seeds)
+                v = sum(r["success"] for r in rr) / len(rr) - WASTE_WEIGHT * float(np.mean([r.get("wasted_frac", 0.0) for r in rr]))
                 study.tell(t, v)
                 history.append({"trial": t.number, "params": {k: round(x, 4) for k, x in p.items()}, "value": v})
         best = max(history, key=lambda h: (h["value"], -h["trial"]))
@@ -264,7 +270,8 @@ class SkillCreator:
         a_ok = [bool(r["success"]) for r in after]
         b_ok = [bool(r["success"]) for r in before]
         p = mcnemar_p(b_ok, a_ok)
-        held = {"success": sum(a_ok), "trials": len(a_ok), "ci95": wilson(sum(a_ok), len(a_ok)),
+        waste = round(float(np.mean([r.get("wasted_frac", 0.0) for r in after])), 3)
+        held = {"success": sum(a_ok), "trials": len(a_ok), "ci95": wilson(sum(a_ok), len(a_ok)), "wasted_frac": waste,
                 "before": sum(b_ok), "p_value": p, "pass": p < ALPHA and sum(a_ok) / len(a_ok) >= 0.7}
         reg = {"tasks": {}, "pass": True}
         for t in REGRESSION_TASKS:
