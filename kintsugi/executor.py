@@ -131,12 +131,12 @@ class Episode:
         card = self.cards[name]
         p = L.card_params(card, params)
         obj, goal = srec["obj"], self.goal_for(srec["obj"])
-        audit, last = [], [self.monitor.pos(obj)]
+        audit, last = [], [self.monitor.moving_pos(obj)]
 
         def on_move(t0, t1):
             # Evaluation only (simulator state, never shown to the primitive): did this motion move the object,
             # and was the goal already met before it started?
-            pos = self.monitor.pos(obj)
+            pos = self.monitor.moving_pos(obj)
             met_before = bool(audit and audit[-1]["goal_met"])
             met = bool(goal) and self.monitor.check_goal([goal])[0]["ok"]
             audit.append({"t0": round(t0, 2), "t1": round(t1, 2), "moved_cm": round(100 * float(np.linalg.norm(pos[:2] - last[0][:2])), 1),
@@ -176,6 +176,13 @@ class Episode:
                     srec["ok"] = False
                     srec["label"] = srec["label"] or "wrong_order"
                     srec["order_missing"] = missing
+        # how far the object's parts moved, from perception (a drawer's handle comes out as the drawer opens)
+        if srec["_desc"].get("parts") and after and after.get("parts"):
+            srec["parts_moved_cm"] = {k: round(100 * float(np.linalg.norm(np.subtract(after["parts"][k]["center"][:2],
+                                                                                     v["center"][:2]))), 1)
+                                      for k, v in srec["_desc"]["parts"].items() if k in after["parts"]}
+        if not srec["ok"] and srec["label"] is None and goal and goal.get("pred") not in ("on", "inside"):
+            srec["label"] = "goal_not_met"                  # a measured goal (e.g. opened by N cm) not reached
         if not srec["ok"] and srec["label"] is None:
             # "drop" only for something that was lifted (a pushed plate is always low)
             lifted = any(t["skill"] == "lift" and t["ok"] for t in srec["trace"])

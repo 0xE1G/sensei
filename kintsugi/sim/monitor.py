@@ -18,6 +18,13 @@ class Monitor:
         m = scene.model
         self.obj_body = {o: m.body(o).id for o in scene.objects}
         self.body_obj = {b: o for o, b in self.obj_body.items()}
+        # moving parts (drawer, door) are child bodies: map them to their object too
+        for b in range(m.nbody):
+            p = b
+            while p > 0 and p not in self.body_obj:
+                p = m.body_parentid[p]
+            if p > 0 and b not in self.body_obj:
+                self.body_obj[b] = self.body_obj[p]
         self.finger_ids = {m.body(n).id for n in FINGER_BODIES}
         robot_root = m.body("link0").id
         self.robot_bodies = {b for b in range(m.nbody) if self._is_desc(b, robot_root)}
@@ -50,13 +57,29 @@ class Monitor:
 
     def finger_contact(self, oid) -> bool:
         d, m = self.scene.data, self.scene.model
-        b = self.obj_body[oid]
+        bodies = {b for b, o in self.body_obj.items() if o == oid}
         for i in range(d.ncon):
             c = d.contact[i]
             pair = {m.geom_bodyid[c.geom1], m.geom_bodyid[c.geom2]}
-            if b in pair and pair & self.finger_ids:
+            if pair & bodies and pair & self.finger_ids:
                 return True
         return False
+
+    def moving_pos(self, oid):
+        """Position of the part that moves: the moving child of an articulated object, else the object itself."""
+        art = self.scene.objects[oid].get("articulated")
+        if art:
+            return self.scene.data.xpos[self.scene.model.body(art["body"]).id].copy()
+        return self.pos(oid)
+
+    def joint_value(self, oid, part=None) -> float:
+        """Opening of an articulated object's moving part: metres for a slide, degrees for a hinge."""
+        art = self.scene.objects[oid].get("articulated")
+        if not art or (part and part != art["part"]):
+            raise ValueError(f"{oid} has no moving part {part or ''}".strip())
+        m = self.scene.model
+        q = float(self.scene.data.qpos[m.jnt_qposadr[m.joint(art["joint"]).id]])
+        return math.degrees(q) if art["type"] == "hinge" else q
 
     def upright(self, oid, tol_deg=25) -> bool:
         R = self.scene.data.xmat[self.obj_body[oid]].reshape(3, 3)
@@ -107,15 +130,29 @@ class Monitor:
         return res
 
     def check_goal(self, goal) -> list[dict]:
+        """Goals are deterministic checks on simulator state. on / inside / upright as before, plus composable
+        measurable terms, each compared with op (">=" or "<=") against value:
+          joint     opening of an object's moving part (m for a drawer slide, degrees for a door hinge)
+          distance  horizontal distance between obj and target (m)
+          height    height of obj's bottom above the table (m)"""
         res = []
         for g in goal:
+            measured = None
             if g["pred"] in ("inside", "on"):
                 ok = self.inside(g["obj"], g["target"])
                 if ok and g.get("upright"):
                     ok = self.upright(g["obj"])
             elif g["pred"] == "upright":
                 ok = self.upright(g["obj"])
+            elif g["pred"] in ("joint", "distance", "height"):
+                if g["pred"] == "joint":
+                    measured = self.joint_value(g["obj"], g.get("part"))
+                elif g["pred"] == "distance":
+                    measured = float(np.linalg.norm(self.pos(g["obj"])[:2] - self.pos(g["target"])[:2]))
+                else:
+                    measured = float(self.pos(g["obj"])[2] + self.scene.objects[g["obj"]].get("bottom_offset", 0))
+                ok = measured >= g["value"] if g.get("op", ">=") == ">=" else measured <= g["value"]
             else:
                 raise ValueError(g["pred"])
-            res.append({**g, "ok": bool(ok)})
+            res.append({**g, "ok": bool(ok), **({"measured": round(measured, 4)} if measured is not None else {})})
         return res

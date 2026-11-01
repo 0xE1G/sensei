@@ -38,6 +38,11 @@ RANGES = {
     "bin":      {"width": (0.12, 0.26), "depth": (0.12, 0.26), "wall_height": (0.04, 0.10)},
     "tray":     {"width": (0.14, 0.30), "depth": (0.12, 0.24)},
     "zone":     {"width": (0.08, 0.25), "depth": (0.08, 0.25)},
+    # Objects with a moving part (a fixed cabinet + a part on a joint). Their front faces the robot.
+    "drawer":   {"width": (0.16, 0.26), "depth": (0.14, 0.20), "height": (0.08, 0.12), "travel": (0.10, 0.15),
+                 "damping": (0.5, 3.0)},
+    "door":     {"width": (0.12, 0.20), "depth": (0.12, 0.18), "height": (0.10, 0.16), "hinge_side": (0.0, 1.0),
+                 "damping": (0.02, 0.2)},
 }
 
 DEFAULTS = {
@@ -54,10 +59,16 @@ DEFAULTS = {
     "bin": {"width": 0.20, "depth": 0.16, "wall_height": 0.06, "color": "brown"},
     "tray": {"width": 0.20, "depth": 0.16, "color": "gray"},
     "zone": {"width": 0.14, "depth": 0.14, "color": "red"},
+    "drawer": {"width": 0.20, "depth": 0.16, "height": 0.10, "travel": 0.13, "damping": 1.5, "color": "white"},
+    "door": {"width": 0.16, "depth": 0.15, "height": 0.13, "hinge_side": 1.0, "damping": 0.08, "color": "white"},
 }
 
+# Moving part per articulated template: joint type and the unit a goal on it uses (m for slides, deg for hinges).
+ARTICULATED = {"drawer": {"part": "drawer", "type": "slide", "unit": "m"},
+               "door": {"part": "door", "type": "hinge", "unit": "deg"}}
+
 # Templates that are containers or targets default to fixed to the table.
-FIXED_BY_DEFAULT = {"bin", "tray", "zone"}
+FIXED_BY_DEFAULT = {"bin", "tray", "zone", "drawer", "door"}
 
 OBJ_FRICTION = lambda f: [float(f), 0.005, 0.0001]
 
@@ -115,6 +126,66 @@ def _ring(body, n, r_inner, base_z, wall_h, wall_t, flare, rgba, mass_total, fri
             rgba=rgba, mass=mass_total / n, friction=friction, condim=4,
         )
     return r_mid + wall_h * math.sin(flare) + wall_t / 2
+
+
+def _handle(body, oid, x_front, y, z, rgba):
+    """A pull handle: an arm sticking out of the front (-x) and a vertical post hanging from it, which a gripper
+    pointing down can pinch from above (fingers either side of the post)."""
+    G = mujoco.mjtGeom
+    reach, th, post_h = 0.05, 0.01, 0.036
+    body.add_geom(name=f"{oid}__handle_arm", type=G.mjGEOM_BOX, size=[reach / 2, th / 2, th / 2],
+                  pos=[x_front - reach / 2, y, z], rgba=rgba, mass=0.01, friction=[1.2, 0.005, 0.0001], condim=4)
+    body.add_geom(name=f"{oid}__handle_post", type=G.mjGEOM_BOX, size=[th / 2, th / 2, post_h / 2],
+                  pos=[x_front - reach + th / 2, y, z - post_h / 2 + th / 2], rgba=rgba, mass=0.01,
+                  friction=[1.2, 0.005, 0.0001], condim=4)
+
+
+def _add_articulated(body, oid, t, p, rgba):
+    """A fixed cabinet shell (open at the front, which faces local -x) plus a moving child body: a drawer on a
+    slide joint or a door on a hinge. Geoms of the moving part are named <id>__<part>_..., the handle <id>__handle_*,
+    the visible front panel <id>__front, so perception can find parts and the monitor can read the joint."""
+    G = mujoco.mjtGeom
+    W, D, H, tk = p["width"], p["depth"], p["height"], 0.01
+    shell = [rgba[0] * 0.85, rgba[1] * 0.85, rgba[2] * 0.85, 1]
+    for name, pos_, size in [("bottom", [0, 0, tk / 2], [D / 2, W / 2, tk / 2]),
+                             ("top", [0, 0, H - tk / 2], [D / 2, W / 2, tk / 2]),
+                             ("left", [0, W / 2 - tk / 2, H / 2], [D / 2, tk / 2, H / 2]),
+                             ("right", [0, -W / 2 + tk / 2, H / 2], [D / 2, tk / 2, H / 2]),
+                             ("back", [D / 2 - tk / 2, 0, H / 2], [tk / 2, W / 2, H / 2])]:
+        body.add_geom(name=f"{oid}_{name}", type=G.mjGEOM_BOX, pos=pos_, size=size, rgba=shell)
+    inner_w, inner_h = W - 2 * tk, H - 2 * tk
+    handle_rgba = [0.2, 0.2, 0.22, 1]
+    if t == "drawer":
+        # Drawer: front panel flush with the cabinet front + bottom, sides and back; slides out along local -x.
+        dr = body.add_body(name=f"{oid}__drawer", pos=[-D / 2, 0, H / 2])
+        dr.add_joint(name=f"{oid}__drawer", type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[-1, 0, 0],
+                     range=[0, p["travel"]], limited=True, damping=p["damping"], armature=0.01)
+        fw, fh = inner_w / 2 - 0.002, inner_h / 2 - 0.002
+        dr.add_geom(name=f"{oid}__front", type=G.mjGEOM_BOX, pos=[0, 0, 0], size=[0.006, fw, fh], rgba=rgba, mass=0.08)
+        L = D - 0.03
+        for name, pos_, size in [("floor", [L / 2, 0, -fh + 0.003], [L / 2, fw - 0.004, 0.003]),
+                                 ("side0", [L / 2, fw - 0.004, 0], [L / 2, 0.003, fh - 0.01]),
+                                 ("side1", [L / 2, -fw + 0.004, 0], [L / 2, 0.003, fh - 0.01]),
+                                 ("rear", [L, 0, 0], [0.003, fw - 0.004, fh - 0.01])]:
+            dr.add_geom(name=f"{oid}__drawer_{name}", type=G.mjGEOM_BOX, pos=pos_, size=size, rgba=rgba, mass=0.05)
+        _handle(dr, oid, -0.006, 0.0, fh * 0.35, handle_rgba)
+        rng_ = [0.0, p["travel"]]
+    else:
+        # Door: a panel over the front opening, hinged on one side edge; opening swings the free edge toward -x.
+        side = 1.0 if p["hinge_side"] >= 0.5 else -1.0
+        dr = body.add_body(name=f"{oid}__door", pos=[-D / 2 - 0.007, side * W / 2, H / 2])
+        dr.add_joint(name=f"{oid}__door", type=mujoco.mjtJoint.mjJNT_HINGE, axis=[0, 0, -side],
+                     range=[0, 1.9], limited=True, damping=p["damping"], armature=0.002)
+        dr.add_geom(name=f"{oid}__front", type=G.mjGEOM_BOX, pos=[0, -side * W / 2, 0],
+                    size=[0.006, W / 2 - 0.002, H / 2 - 0.002], rgba=rgba, mass=0.06)
+        _handle(dr, oid, -0.006, -side * (W - 0.03), H * 0.18, handle_rgba)
+        rng_ = [0.0, 1.9]
+        p["hinge_side"] = side
+    a = ARTICULATED[t]
+    return {"height": H, "width": max(W, D), "hollow": False, "bottom_offset": 0.0, "half_x": D / 2,
+            "half_y": W / 2, "rim_z": H, "floor_z": tk,
+            "articulated": {"part": a["part"], "joint": f"{oid}__{a['part']}", "type": a["type"], "unit": a["unit"],
+                            "range": rng_, "body": f"{oid}__{a['part']}"}}
 
 
 def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> dict:
@@ -207,6 +278,8 @@ def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> d
             body.add_geom(name=f"{obj.id}_lip{i}", type=G.mjGEOM_BOX, size=[sx, sy, lip / 2],
                           pos=[px, py, lip / 2], rgba=rgba)
         meta.update(height=lip, width=max(w, d), hollow=False, half_x=w / 2, half_y=d / 2, rim_z=lip, floor_z=t_)
+    elif t in ARTICULATED:
+        meta.update(_add_articulated(body, obj.id, t, p, rgba))
     elif t == "zone":
         w, d = p["width"], p["depth"]
         rgba[3] = 0.6

@@ -218,9 +218,32 @@ def isolate(task: dict, obj: str) -> dict:
     return out
 
 
+def open_drawer(seed=0) -> dict:
+    """A cabinet with a drawer, front facing the robot; open the drawer at least 8 cm."""
+    rng = np.random.default_rng(seed)
+    p = {"width": float(rng.uniform(0.16, 0.26)), "depth": float(rng.uniform(0.14, 0.20)),
+         "height": float(rng.uniform(0.08, 0.12)), "travel": float(rng.uniform(0.11, 0.15)),
+         "damping": float(rng.uniform(0.5, 3.0)), "color": "white"}
+    return {"name": "open_drawer", "prompt": "Open the drawer.",
+            "objects": [{"id": "drawer", "template": "drawer", "role": "item", "params": p}],
+            "goal": [{"pred": "joint", "obj": "drawer", "op": ">=", "value": 0.08}], "constraints": []}
+
+
+def open_door(seed=0) -> dict:
+    """A cabinet with a hinged door (hinge on either side), front facing the robot; open it at least 50 degrees."""
+    rng = np.random.default_rng(seed)
+    p = {"width": float(rng.uniform(0.12, 0.20)), "depth": float(rng.uniform(0.12, 0.18)),
+         "height": float(rng.uniform(0.10, 0.16)), "hinge_side": float(rng.integers(0, 2)),
+         "damping": float(rng.uniform(0.02, 0.2)), "color": "white"}
+    return {"name": "open_door", "prompt": "Open the door.",
+            "objects": [{"id": "door", "template": "door", "role": "item", "params": p}],
+            "goal": [{"pred": "joint", "obj": "door", "op": ">=", "value": 50.0}], "constraints": []}
+
+
 TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bowl_on_tray": bowl_on_tray,
          "cup_on_tray": cup_on_tray, "single_block": single_block, "sort_with_bowl": sort_with_bowl,
-         "probe": probe, "stack_by_size": stack_by_size, "slide_plate": slide_plate}
+         "probe": probe, "stack_by_size": stack_by_size, "slide_plate": slide_plate,
+         "open_drawer": open_drawer, "open_door": open_door}
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:

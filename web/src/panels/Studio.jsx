@@ -231,6 +231,19 @@ function RecentRuns({ history, current, onPick }) {
   );
 }
 
+// measured goals in words: "opened ≥ 8 cm", "within 5 cm of tray", "upright"
+function measureText(g, objects) {
+  const tmpl = (objects.find((o) => o.id === g.obj) || {}).template;
+  const op = g.op === "<=" ? "≤" : "≥";
+  if (g.pred === "joint") {
+    const verb = g.op === "<=" ? "closed to" : "opened";
+    return tmpl === "door" ? `${verb} ${op} ${g.value}°` : `${verb} ${op} ${Math.round(g.value * 100)} cm`;
+  }
+  if (g.pred === "distance") return `${g.op === "<=" ? "within" : "at least"} ${Math.round(g.value * 100)} cm of ${nice(g.target)}`;
+  if (g.pred === "height") return `bottom ${op} ${Math.round(g.value * 100)} cm above the table`;
+  return nice(g.pred);
+}
+
 function ObjChip({ id, objects }) {
   const o = objects.find((x) => x.id === id) || {};
   return <span className="obj"><i style={{ background: COLORS[o.params?.color] || "var(--s0)" }} />{nice(id)}</span>;
@@ -247,7 +260,9 @@ function PlanCard({ spec, program, programLoading }) {
         {goals.map((g, i) => (
           <li key={i}>
             <span className="goal-no">{seq.length ? i + 1 : "•"}</span>
-            <ObjChip id={g.obj} objects={t.objects} /><span className="goal-arrow">→</span><ObjChip id={g.target} objects={t.objects} />
+            <ObjChip id={g.obj} objects={t.objects} />
+            {g.pred === "on" || g.pred === "inside" ? <><span className="goal-arrow">→</span><ObjChip id={g.target} objects={t.objects} /></>
+              : <span className="goal-measure">{measureText(g, t.objects)}</span>}
             {g.upright && <span className="tag">upright</span>}
           </li>
         ))}

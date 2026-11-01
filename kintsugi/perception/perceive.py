@@ -17,13 +17,60 @@ from .camera import Camera
 
 
 def _geom_to_object(model, object_ids):
+    """geom -> object id, including geoms of an object's moving child bodies (drawer, door)."""
+    roots = {model.body(oid).id: oid for oid in object_ids}
     lut = {}
-    for oid in object_ids:
-        b = model.body(oid).id
-        for g in range(model.ngeom):
-            if model.geom_bodyid[g] == b:
-                lut[g] = oid
+    for g in range(model.ngeom):
+        b = model.geom_bodyid[g]
+        while b > 0 and b not in roots:
+            b = model.body_parentid[b]
+        if b in roots:
+            lut[g] = roots[b]
     return lut
+
+
+PART_NAMES = ("handle", "front")
+
+
+def _geom_to_part(model, lut):
+    """geom -> (object id, part) for named parts (<id>__handle_*, <id>__front)."""
+    out = {}
+    for g, oid in lut.items():
+        name = model.geom(g).name or ""
+        for part in PART_NAMES:
+            if name.startswith(f"{oid}__{part}"):
+                out[g] = (oid, part)
+    return out
+
+
+def describe_part(points: np.ndarray, obj_center, panel: bool = False, normal=None) -> dict | None:
+    """A part seen in depth: its 3D centre, size, and the horizontal direction pointing out of the object.
+    panel=True (a flat front): the normal is perpendicular to the panel's long horizontal axis, turned away from
+    the object's centre. Otherwise the given normal (e.g. the front it is mounted on) or centre -> part."""
+    if points is None or len(points) < 6:
+        return None
+    lo, hi = np.percentile(points, 3, axis=0), np.percentile(points, 97, axis=0)
+    c = (lo + hi) / 2
+    out_dir = c[:2] - np.asarray(obj_center, float)
+    if panel and len(points) >= 20:
+        xy = points[:, :2] - points[:, :2].mean(0)
+        _, v = np.linalg.eigh(np.cov(xy.T))
+        n = np.array([-v[1, -1], v[0, -1]])               # perpendicular to the long axis
+        n = n if n @ out_dir >= 0 else -n
+    elif normal is not None:
+        n = np.asarray(normal, float)
+    else:
+        n = out_dir
+    n = n / max(np.linalg.norm(n), 1e-6)
+    tangent = np.array([-n[1], n[0]])
+    proj = (points[:, :2] - c[:2]) @ tangent
+    # tip: the outermost points along the normal (a handle's graspable post sticks out furthest)
+    out_ = points[:, :2] @ n
+    tip_pts = points[out_ >= np.percentile(out_, 85)]
+    tip = [float(v) for v in np.median(tip_pts, axis=0)]
+    return {"center": [float(v) for v in c], "tip": tip, "normal": [float(n[0]), float(n[1])],
+            "width": float(np.percentile(proj, 97) - np.percentile(proj, 3)), "height": float(hi[2] - lo[2]),
+            "n_points": int(len(points))}
 
 
 def describe(points: np.ndarray, table_z: float = 0.0) -> dict | None:
@@ -111,6 +158,11 @@ class Perception:
         self.calls = 0
         self.cams = [Camera(scene.model, scene.data, c, width, height) for c in cameras] if mode != "ground_truth" else []
         self.lut = _geom_to_object(scene.model, list(scene.objects))
+        self.part_lut = _geom_to_part(scene.model, self.lut)
+        # Objects with named parts get one extra camera on the robot's side (cabinet fronts face the robot); it is
+        # used for part points only, so object descriptors keep coming from the same cameras as before.
+        self.part_cams = ([Camera(scene.model, scene.data, "near", width, height)]
+                          if self.part_lut and mode != "ground_truth" else [])
         self.last_points = {}        # object id -> world-frame point cloud from the latest perceive()
 
     def perceive(self, object_ids=None) -> dict:
@@ -134,7 +186,29 @@ class Perception:
             P = np.concatenate(pts[o]) if pts[o] else None
             self.last_points[o] = P
             out[o] = describe(P)
+        self._add_parts(out, object_ids)
         return out
+
+    def _add_parts(self, out, object_ids):
+        wanted = {(o, p) for o, p in self.part_lut.values() if o in object_ids and out.get(o)}
+        if not wanted:
+            return
+        pts = {k: [] for k in wanted}
+        for cam in self.cams + self.part_cams:
+            seg, depth = cam.segmentation(), cam.depth()
+            for key in wanted:
+                gids = [g for g, k in self.part_lut.items() if k == key]
+                mask = np.isin(seg, gids)
+                if mask.sum() > 0:
+                    pts[key].append(cam.points(depth, mask))
+        # the front first: a handle faces the way the front it is mounted on faces
+        for (o, part) in sorted(pts, key=lambda k: k[1] != "front"):
+            chunks = pts[(o, part)]
+            front = out[o].get("parts", {}).get("front")
+            d = describe_part(np.concatenate(chunks) if chunks else None, out[o]["center"], panel=part == "front",
+                              normal=front["normal"] if front and part != "front" else None)
+            if d:
+                out[o].setdefault("parts", {})[part] = d
 
     def _truth(self, oid) -> dict:
         m, d = self.scene.model, self.scene.data
@@ -158,5 +232,5 @@ class Perception:
         return out
 
     def close(self):
-        for c in self.cams:
+        for c in self.cams + self.part_cams:
             c.close()

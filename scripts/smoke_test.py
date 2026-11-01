@@ -143,6 +143,23 @@ def main():
     results.append(check("generated push primitive", not check_primitive(prop["code"]) and rec_push["success"],
                          f"{rec_push['subtasks'][0]['label']} {rec_push.get('program_error')}"))
 
+    # Articulated object: the drawer's handle is perceived as a part, the stand-in opening motion pulls it, and the
+    # measured joint goal (drawer slid out >= 8 cm) holds.
+    dtask = make_task("open_drawer", seed=0)
+    dscene = build_scene(dtask, seed=0)
+    dper = Perception(dscene, "sim")
+    dparts = (dper.perceive()["drawer"] or {}).get("parts", {})
+    dper.close()
+    oprop = client.complete("propose_primitive", {"capability": "open_drawer", "why": "smoke",
+                                                  "obj": {"parts": dparts}, "target": None}).output
+    ocard = {"name": oprop["name"], "kind": "open_drawer", "version": 1, "impl": "generated", "code": oprop["code"],
+             "params": oprop["params"]}
+    rec_open, _ = run_episode(dtask, seed=0, extra_cards={ocard["name"]: ocard},
+                              program="use('open_drawer', find_one(id='drawer'))")
+    results.append(check("drawer: handle part + opening skill + joint goal",
+                         "handle" in dparts and rec_open["success"],
+                         f"{rec_open['subtasks'][0].get('label')} {rec_open.get('program_error')}"))
+
     # Investigator on the rule backend: a tall cylinder fails with top_grasp; the shallow-grasp cause is confirmed.
     spec = probe(7, {"template": "cylinder", "params": {"radius": 0.025, "height": 0.14}, "pos": [0.5, 0.1], "yaw": 0.0})
     inv = Investigator(workers=1, library=seed_library(), performance={}, client=client, run_id="smoke/investigate")

@@ -27,6 +27,8 @@ CAMERAS = {
     "front": ((1.25, 0.0, 0.85), (0.5, 0.0, 0.0)),
     "top": ((0.5, 0.0, 1.35), (0.5, 0.0, 0.0)),
     "side": ((0.55, -0.95, 0.65), (0.5, 0.0, 0.05)),
+    # From the robot's side: sees the fronts of cabinets (handles). Used only to find object parts.
+    "near": ((0.12, -0.42, 0.62), (0.6, 0.05, 0.05)),
 }
 
 
@@ -106,6 +108,9 @@ def _footprint(o) -> float:
         return p["radius"] + 0.01
     if o.template == "bar":
         return 0.5 * math.hypot(p["length"], p["width"])
+    if o.template in ("drawer", "door"):
+        # the cabinet plus the space in front of it the drawer / door needs when it opens
+        return 0.5 * math.hypot(p["width"], p["depth"]) + 0.06
     return 0.5 * max(p.get("size", 0), 2 * p.get("radius", 0)) * 1.42
 
 
@@ -120,11 +125,13 @@ def _sample_once(objs, rng, max_tries=400, fixed=None):
             continue
         rad = _footprint(o)
         gap = 0.05 if o.role == "target" else 0.035
+        cabinet = o.template in ("drawer", "door")
         for _ in range(max_tries):
-            x = rng.uniform(*REACH["x"])
-            y = rng.uniform(*REACH["y"])
+            # cabinets stand at the back of the reachable area so the opened drawer / door stays reachable
+            x = rng.uniform(0.6, 0.67) if cabinet else rng.uniform(*REACH["x"])
+            y = rng.uniform(-0.15, 0.15) if cabinet else rng.uniform(*REACH["y"])
             r = math.hypot(x, y)
-            if not (REACH["r"][0] + rad * 0.3 <= r <= REACH["r"][1] - rad * 0.3):
+            if not cabinet and not (REACH["r"][0] + rad * 0.3 <= r <= REACH["r"][1] - rad * 0.3):
                 continue
             if all(math.hypot(x - px, y - py) > rad + pr + gap for px, py, pr in placed):
                 break
@@ -133,6 +140,8 @@ def _sample_once(objs, rng, max_tries=400, fixed=None):
         yaw_range = {"mug": math.pi, "bar": math.pi / 2, "block": math.pi / 4,
                      "bin": 0.3, "tray": 0.3, "zone": 0.3}.get(o.template, 0.0)
         yaw = rng.uniform(-yaw_range, yaw_range) if yaw_range else 0.0
+        if cabinet:
+            yaw = math.atan2(y, x) + rng.uniform(-0.12, 0.12)      # local -x (the front) faces the robot
         placed.append((x, y, rad))
         out[o.id] = (x, y, yaw)
     return out

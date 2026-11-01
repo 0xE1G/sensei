@@ -59,6 +59,9 @@ def rule(inputs) -> dict:
         done.add(ready[0]["obj"])
     lines = []
     kinds = {o["id"]: o["template"] for o in inputs["task"]["objects"]}
+    for g in inputs["task"]["goal"]:
+        if g.get("pred") == "joint":                    # opening needs a motion, named after what it opens
+            lines += [f'use("open_{kinds.get(g["obj"], "part")}", find_one(id="{g["obj"]}"))']
     for g in order:
         if kinds.get(g["obj"]) == "plate":            # no grasp lifts a plate: it needs a motion, not a pick
             lines += [f'use("push", find_one(id="{g["obj"]}"), find_one(id="{g["target"]}"))']

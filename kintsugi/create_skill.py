@@ -30,6 +30,14 @@ from .tasks.splits import split_seeds
 WASTE_WEIGHT = 0.1     # tuning objective: success rate - 0.1 x wasted-motion fraction (a tie-breaker)
 
 CAPABILITIES = {
+    "open_drawer": {"kind": "open_drawer",
+                    "description": "pull a drawer open: grasp its handle and slide the drawer out along the "
+                                   "front's outward normal",
+                    "program": "use('open_drawer', find_one(id='{obj}'))"},
+    "open_door": {"kind": "open_door",
+                  "description": "swing a hinged door open: grasp its handle and pull it along the arc around the "
+                                 "hinge (a vertical axis at one side edge of the front)",
+                  "program": "use('open_door', find_one(id='{obj}'))"},
     "push": {"kind": "push",
              "description": "move an object along the table to a target location without grasping it (the object "
                             "cannot be grasped: no grasp in the library fits it)",
@@ -138,19 +146,21 @@ class SkillCreator:
             except RuntimeError:
                 continue
         per = Perception(scene)
-        d = per.perceive([self.obj, self.target])
+        d = per.perceive([o for o in (self.obj, self.target) if o])
         per.close()
-        keep = ("center", "width", "height", "top_z", "axis_yaw", "extent_major", "extent_minor")
-        return ({k: (round(v, 4) if isinstance(v, float) else v) for k, v in d[self.obj].items() if k in keep},
-                {k: (round(v, 4) if isinstance(v, float) else v) for k, v in d[self.target].items() if k in keep})
+        keep = ("center", "width", "height", "top_z", "axis_yaw", "extent_major", "extent_minor", "parts")
+        view = lambda o: ({k: (round(v, 4) if isinstance(v, float) else v) for k, v in d[o].items() if k in keep}
+                          if o and d.get(o) else None)
+        return view(self.obj), view(self.target)
 
     def propose(self, before, feedback=None, others=None):
         obj, target = self._examples()
         why = (f"the task '{self.task_label}' fails with the current library ({before['success']}/{before['trials']}; "
                f"grasp failures {before['labels']}); a plan asking for {self.capability} reports: "
                f"{before['missing_capability'] or before['program_error']}")
+        goal = next((g for g in self._task(0)["goal"] if g.get("obj") == self.obj), None)
         res = self.client.complete("propose_primitive", {"capability": f"{self.capability}: {self.cap['description']}",
-                                                         "why": why, "obj": obj, "target": target,
+                                                         "why": why, "obj": obj, "target": target, "goal": goal,
                                                          "feedback": feedback, "other_strategies": others})
         out = res.output
         card = {"name": out["name"] if out["name"].startswith(self.capability) else f"{self.capability}_{out['name']}",
@@ -198,6 +208,12 @@ class SkillCreator:
                                    if s.get("trace") and s["trace"][0]["info"].get("error"))
         moved = [o.get("moved_xy") for o in obs if o.get("moved_xy") is not None]
         dist = [o.get("dist_to_target_xy") for o in obs if o.get("dist_to_target_xy") is not None]
+        parts = [s.get("parts_moved_cm") or {} for rec in recs for s in rec["subtasks"]]
+        if any(parts):
+            names = sorted({k for p in parts for k in p})
+            return (f"- {len(recs)} trials of the 5 best candidates, none met the goal.\n- code errors: {dict(errs) or 'none'}\n"
+                    + "".join(f"- {n} moved on average {np.mean([p.get(n, 0) for p in parts]):.1f} cm (perception)\n" for n in names)
+                    + f"- labels: {dict(collections.Counter(l for r in rows for l in r['labels']))}")
         return (f"- {len(recs)} trials of the 5 best candidates, none reached the target.\n"
                 f"- code errors: {dict(errs) or 'none'}\n"
                 f"- object moved on average {100 * np.mean(moved):.1f} cm; ended {100 * np.mean(dist):.1f} cm from "

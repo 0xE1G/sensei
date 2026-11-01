@@ -29,6 +29,8 @@ def render(inputs):
     if others:
         fb_text += ("\nOther proposals already being tested use these strategies; propose a genuinely DIFFERENT one "
                     "(a different way of contacting or moving the object):\n" + "\n".join(f"- {o}" for o in others))
+    if inputs.get("goal"):
+        fb_text = f"\nSuccess is measured as: {json.dumps(inputs['goal'])}" + fb_text
     return _SYSTEM, (_USER.replace("{capability}", inputs["capability"]).replace("{why}", inputs["why"])
                      .replace("{obj}", json.dumps(inputs["obj"])).replace("{target}", json.dumps(inputs.get("target")))
                      .replace("{feedback}", fb_text))
@@ -79,6 +81,15 @@ RULE_CODE = '''def primitive(obj, target, p):
 
 
 def rule(inputs) -> dict:
+    """Stand-in: opening a part (drawer, door) -> grasp the handle and pull; otherwise a two-finger push."""
+    cap = inputs["capability"].split(":")[0]
+    if (inputs.get("obj") or {}).get("parts", {}).get("handle") and ("open" in cap or "close" in cap):
+        from .open_motions import stand_in
+        return stand_in(cap)
+    return _push_rule(inputs)
+
+
+def _push_rule(inputs) -> dict:
     """Stand-in: a two-finger push. Open fingers spread across the push direction give two contacts (a disc
     pushed at one point spins away); start behind the object, slide it the distance to the target."""
     return {"name": "push_two_finger", "code": RULE_CODE,

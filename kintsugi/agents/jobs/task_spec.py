@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from ...sim.templates import COLORS, DEFAULTS, RANGES
+from ...sim.templates import ARTICULATED, COLORS, DEFAULTS, RANGES
 from ..llm import Job, load_prompt, register
 
 CONTAINERS_INSIDE = {"bowl", "cup", "bin"}
@@ -31,9 +31,11 @@ SCHEMA = {
                                    "role": {"enum": ["item", "target", "obstacle"]},
                                    "params": {"type": "object"}, "fixed": {"type": "boolean"}}}},
                 "goal": {"type": "array", "items": {
-                    "type": "object", "required": ["pred", "obj", "target"],
-                    "properties": {"pred": {"enum": ["inside", "on"]}, "obj": {"type": "string"},
-                                   "target": {"type": "string"}, "upright": {"type": "boolean"}}}},
+                    "type": "object", "required": ["pred", "obj"],
+                    "properties": {"pred": {"enum": ["inside", "on", "joint", "distance", "height", "upright"]},
+                                   "obj": {"type": "string"}, "target": {"type": "string"},
+                                   "upright": {"type": "boolean"}, "part": {"type": "string"},
+                                   "op": {"enum": [">=", "<="]}, "value": {"type": "number"}}}},
                 "constraints": {"type": "array", "items": {
                     "type": "object", "required": ["pred", "obj"],
                     "properties": {"pred": {"enum": list(CONSTRAINTS)}, "obj": {"type": "string"}}}},
@@ -90,10 +92,13 @@ def validate(out, inputs) -> list[str]:
     by_id = {o["id"]: o for o in t["objects"]}
     goal_objs = []
     for g in t["goal"]:
+        errs += _check_term(g, by_id)
         for k in ("obj", "target"):
-            if g[k] not in by_id:
+            if k in g and g[k] not in by_id:
                 errs.append(f"goal refers to unknown object '{g[k]}'")
-        if g["obj"] in by_id and g["target"] in by_id:
+        if g["pred"] in ("inside", "on") and "target" not in g:
+            errs.append(f"goal '{g['pred']}' for {g['obj']} needs a target")
+        if g["pred"] in ("inside", "on") and g["obj"] in by_id and g.get("target") in by_id:
             tt = by_id[g["target"]]["template"]
             if g["pred"] == "inside" and tt not in CONTAINERS_INSIDE:
                 errs.append(f"'inside' needs a bowl, cup or bin as target, not {tt} ({g['target']}); use 'on' for trays and zones")
@@ -103,7 +108,7 @@ def validate(out, inputs) -> list[str]:
                 errs.append(f"goal object '{g['obj']}' must have role item")
         goal_objs.append(g["obj"])
     items = [o["id"] for o in t["objects"] if o.get("role", "item") == "item"]
-    stack_bases = {g["target"] for g in t["goal"]}
+    stack_bases = {g["target"] for g in t["goal"] if "target" in g}
     for i in items:
         n = goal_objs.count(i)
         if n > 1 or (n == 0 and i not in stack_bases):
@@ -133,6 +138,30 @@ def validate(out, inputs) -> list[str]:
     return errs
 
 
+def _check_term(g, by_id) -> list[str]:
+    """Composable measurable goal terms (joint / distance / height): op + value, within what the object allows."""
+    if g["pred"] not in ("joint", "distance", "height"):
+        return []
+    errs = []
+    if g.get("op") not in (">=", "<=") or not isinstance(g.get("value"), (int, float)):
+        return [f"goal '{g['pred']}' on {g['obj']} needs op ('>=' or '<=') and a numeric value"]
+    o = by_id.get(g["obj"])
+    if g["pred"] == "joint" and o:
+        art = ARTICULATED.get(o["template"])
+        if not art:
+            return [f"'{g['obj']}' ({o['template']}) has no moving part; 'joint' goals need one of {sorted(ARTICULATED)}"]
+        if g.get("part", art["part"]) != art["part"]:
+            errs.append(f"{g['obj']} has moving part '{art['part']}', not '{g.get('part')}'")
+        hi = (RANGES[o["template"]]["travel"][1] if art["unit"] == "m" else 105.0)
+        if not 0 < g["value"] <= hi:
+            errs.append(f"joint value for {g['obj']} must be in (0, {hi}] {art['unit']}")
+    if g["pred"] == "distance" and "target" not in g:
+        errs.append(f"goal 'distance' for {g['obj']} needs a target")
+    if g["pred"] in ("distance", "height") and not 0 <= g["value"] <= 0.6:
+        errs.append(f"'{g['pred']}' value must be metres between 0 and 0.6")
+    return errs
+
+
 def to_task(out, inputs) -> dict:
     """The executor's task dict from a validated 'ok' output."""
     t = out["task"]
@@ -149,7 +178,7 @@ def to_task(out, inputs) -> dict:
 REFUSE = [(r"\b(pour|water|liquid|juice|fill)\b", "Liquids are not supported in this simulation."),
           (r"\b(fold|cloth|towel|rope|cable)\b", "Deformable objects are not supported."),
           (r"\b(cut|slice|knife)\b", "Cutting is outside what this robot can do."),
-          (r"\b(open|unscrew)\b.*\b(jar|lid|bottle|door|drawer)\b", "Opening things is not supported, only pick and place.")]
+          (r"\b(open|unscrew)\b.*\b(jar|lid|bottle)\b", "Unscrewing jars, lids or bottles is not supported.")]
 
 
 def rule(inputs) -> dict:
@@ -160,6 +189,11 @@ def rule(inputs) -> dict:
         if re.search(pat, p):
             return {"status": "refuse", "reason": reason}
     has = lambda *ws: all(re.search(rf"\b{w}", p) for w in ws)
+    if has("open") and (has("drawer") or has("door")):
+        task = specs.open_drawer(seed=0) if has("drawer") else specs.open_door(seed=0)
+        return {"status": "ok", "task": {"name": task["name"], "prompt": inputs["prompt"], "objects": [
+            {"id": o["id"], "template": o["template"], "role": o.get("role", "item"), "params": {}} for o in task["objects"]],
+            "goal": task["goal"], "constraints": []}}
     if has("stack") and has("block"):
         task = specs.stack_by_size(seed=0)
     elif has("sort") and has("bowl") and has("tray"):

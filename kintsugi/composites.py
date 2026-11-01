@@ -28,7 +28,7 @@ ALPHA = 0.05
 
 def signature(task: dict) -> list[str]:
     kinds = {o["id"]: o["template"] for o in task["objects"]}
-    sig = sorted(f"{g['pred']}:{kinds.get(g['obj'])}->{kinds.get(g['target'])}" for g in task["goal"]
+    sig = sorted(f"{g['pred']}:{kinds.get(g['obj'])}->{kinds.get(g.get('target'))}" for g in task["goal"]
                  if g.get("pred") in ("inside", "on"))
     sig += sorted(f"{c['pred']}:{kinds.get(c['obj'])}" for c in task.get("constraints", []))
     return sig

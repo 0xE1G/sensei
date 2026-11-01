@@ -441,6 +441,32 @@ round started by the search (see status).
      Cause found: Claude's straddle push did two open-loop passes from the start pose, the second through empty air
      (48-50% idle); push_from_behind 0% idle (12 cm overshoot inside the zone).
    - Motion API `look()`: fresh perception of the object, so primitives can work closed-loop (prompt v3).
+8g. **Objects with moving parts, composable success, part perception (2026-11-01, built generic)**:
+   - Templates `drawer` (fixed cabinet + drawer on a slide joint, travel 10-15 cm) and `door` (cabinet + panel on a
+     hinge at one side, 0-109 deg), `ARTICULATED` in templates.py (part, joint type, unit m/deg). Geom names
+     <id>__front, <id>__handle_arm/_post (a post the gripper pinches from above), moving body <id>__<part>. Placer puts
+     cabinets at x 0.60-0.67 facing the robot (yaw = atan2(y, x)) with room in front to open.
+   - Monitor: child bodies map to their object; `joint_value` (m / deg); `moving_pos`; check_goal adds composable
+     measured terms `joint` / `distance` / `height` with op (>=, <=) + value (records carry `measured`); on / inside /
+     upright unchanged. task_spec schema/validator accept them (joint only on articulated templates, value within the
+     object's range); prompt v6 lists the forms and says to clarify/refuse when none expresses the request; the old
+     refusal of drawers/doors is narrowed to unscrewing jars/lids/bottles.
+   - Perception: geoms of moving parts belong to their object; parts "front" / "handle" described from depth
+     (`describe_part`: centre, tip = outermost points (the handle post), normal, width, height); the front's normal is
+     perpendicular to the panel's long axis, a handle takes its front's normal. Part points also use one extra camera
+     "near" on the robot's side; object descriptors keep using front + top only. Handle tip error 5-6 mm.
+   - Skill creation: propose prompt v4 explains parts and that joints are not observable; inputs carry the goal;
+     rule stand-in `agents/jobs/open_motions.py` (straight pull along the front normal; arc around the hinge assumed at
+     the front's edge opposite the handle). CAPABILITIES open_drawer / open_door, named tasks open_drawer (>= 8 cm),
+     open_door (>= 50 deg); plan prompt v7 + rule stand-in write use("open_<template>", obj); executor labels missed
+     measured goals `goal_not_met`, records `parts_moved_cm`; motion audit follows the moving part.
+   - Results (rule backend, dry runs, no card written): open_drawer from nothing: before 0/8, search 29-32/41
+     settings work, tune 8/8, gate held-out 16/16 vs 0/16 (p 1.5e-05), regression pass; open_door: 22-31/41, tune 8/8,
+     gate 15/16 vs 0/16 (p 3.1e-05), regression pass. Claude (Studio): "Open the drawer of the cabinet." -> goal
+     joint >= 0.10 m, program use("open_drawer", drawer). Existing tasks unchanged: 5 tasks x 6 fixed seeds, new code
+     vs last commit, 30/30 identical (success, sim time, labels). Smoke 24/24 (new drawer check).
+   - Not built yet: importer for user MJCF/URDF models (doors etc. come from the templates for now); closing
+     motions (the goal form supports op "<=").
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked
