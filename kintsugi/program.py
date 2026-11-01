@@ -222,7 +222,7 @@ def run_program(ep, code: str) -> dict:
         """A motion no grasp/place can do (push, slide, ...): run the library's verified model-written skill of that
         kind. If there is none, the program stops with "missing capability: <kind>" and the call is recorded, so
         Kintsugi can create the skill (create_skill.py) for exactly this request and these objects."""
-        from .skills.router import score, shape_group as group
+        from .skills.router import pick_motion, shape_group as group
         _budget()
         capability = str(capability).strip().lower().replace(" ", "_")
         if state["held"] is not None:
@@ -239,7 +239,7 @@ def run_program(ep, code: str) -> dict:
         if srec["_desc"] is None:
             ep.finish(srec, ep.goal_for(oid))
             return False
-        name = skill or max(cands, key=lambda n: score(ep.performance, n, group(srec["_desc"])))
+        name = skill or pick_motion(ep.cards, cands, ep.performance, group(srec["_desc"]))
         srec["routing"] = {"reason": "push skill", "card": name}
         tdesc = ep.perc.perceive([tid])[tid] if tid else None
         ep.push(srec, name, tdesc, _params(name, srec["_desc"]))

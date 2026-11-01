@@ -1,4 +1,4 @@
-version: 4
+version: 5
 You write a new motion primitive for a simulated robot arm (Franka Panda with a parallel-jaw gripper) because its
 skill library has no skill that can do what a task needs. You write the SHAPE of the motion as parameterized Python;
 a search in simulation will then tune the parameter values within the ranges you declare, and statistical tests
@@ -21,6 +21,20 @@ clip(v, lo, hi) and Python built-ins like min max abs):
 - look() -> a fresh perception dict of the object (same keys as obj; may be empty if it is not visible). Use it to
   work closed-loop: re-plan from where the object is now, and stop once it has reached the target. Motions after
   the goal is reached are measured as wasted and count against a proposal.
+Part-level motions (prefer these for anything that grasps and moves a part of an object; they react to contact, so
+the skill works on parts of different sizes and travel without hard-coded distances):
+- grasp_part(part, approach=0.08, height=0.0, depth=0.0, force=25.0, from_above=0) -> bool: open, come in from
+  `approach` m out along part['normal'] (or from above if from_above=1), pinch the part at part['tip'] shifted by
+  `height` (z) and `depth` (into the object), fingers either side, the hand's x axis along the normal. True if the
+  fingers hold something.
+- move_linear(dx, dy, dz=0.0, dist=0.1, speed=0.06, until_stall=1, stall_lag=0.012) -> {'moved', 'stalled', 'lost'}:
+  carry the hand along a direction for up to `dist` m; with until_stall it stops by itself when the hand falls
+  `stall_lag` m behind its path (the part reached its end stop) and stops pulling, or when the grip is lost.
+- move_arc(cx, cy, angle=90.0, speed=0.06, until_stall=1, stall_lag=0.012, turn_hand=1) -> {'turned', 'stalled',
+  'lost'}: carry the hand around the vertical axis through (cx, cy) by up to `angle` degrees (positive =
+  counter-clockwise seen from above), turning the hand with the arc; stops the same way.
+- release() opens the gripper; retreat(dz=0.08) moves the hand straight up; holding() -> bool.
+Prefer letting a motion stop at the end stop over a fixed travel distance: objects differ in how far they move.
 
 Write a module that defines exactly one entry point:
     def primitive(obj, target, p):

@@ -112,10 +112,12 @@ class Robot:
         return self.cfg.q[:7].copy()
 
     def move_to(self, pos, R, speed: float = 0.25, settle: float = 0.25, tol: float = 0.006,
-                watch_grip: bool = False) -> dict:
+                watch_grip: bool = False, correct: bool = True) -> dict:
         """Straight-line Cartesian move of the TCP to (pos, R). Returns reached/err info.
         watch_grip: the hand carries something; if the finger gap collapses (closed on nothing: the object slipped
-        out) the move stops right there and returns lost_grip=True with the time (proprioception only)."""
+        out) the move stops right there and returns lost_grip=True with the time (proprioception only).
+        correct=False: no sag correction (it aims past the target by the residual, which pushes harder into
+        whatever is blocking the hand: wrong for motions that must notice they have hit an end stop)."""
         self._sync_cfg()
         p0, R0 = self.tcp_pose()
         pos = np.asarray(pos, float)
@@ -140,7 +142,7 @@ class Robot:
         self.wait(settle)
         # Joint servos sag a few mm under gravity and load: aim past the target by the residual.
         cmd = pos.copy()
-        for _ in range(3):
+        for _ in range(3 if correct else 0):
             resid = pos - self.tcp_pose()[0]
             if np.linalg.norm(resid) < tol * 0.4:
                 break

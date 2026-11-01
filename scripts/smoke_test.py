@@ -143,9 +143,11 @@ def main():
     results.append(check("generated push primitive", not check_primitive(prop["code"]) and rec_push["success"],
                          f"{rec_push['subtasks'][0]['label']} {rec_push.get('program_error')}"))
 
-    # Articulated object: the drawer's handle is perceived as a part, the stand-in opening motion pulls it, and the
-    # measured joint goal (drawer slid out >= 8 cm) holds.
+    # Articulated object: the drawer's handle is perceived as a part, the stand-in opening motion (part-level
+    # grasp_part + move_linear until the hand stalls) pulls a short drawer to its end stop, and the measured joint
+    # goal (drawer slid out >= 8 cm) still holds at the end of the episode.
     dtask = make_task("open_drawer", seed=0)
+    dtask["objects"][0]["params"]["travel"] = 0.09   # a short drawer: the pull must stop at the end stop
     dscene = build_scene(dtask, seed=0)
     dper = Perception(dscene, "sim")
     dparts = (dper.perceive()["drawer"] or {}).get("parts", {})

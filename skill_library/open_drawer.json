@@ -1,0 +1,98 @@
+{
+  "name": "open_drawer",
+  "version": 1,
+  "kind": "open_drawer",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    handle = obj['parts']['handle']\n    front = obj['parts']['front']\n    \n    handle_center = handle['center']\n    handle_tip = handle['tip']\n    handle_normal = handle['normal']\n    front_normal = front['normal']\n    \n    # Approach from along the handle normal (pointing out from drawer)\n    approach_offset = p['approach_offset']\n    approach_x = handle_center[0] + handle_normal[0] * approach_offset\n    approach_y = handle_center[1] + handle_normal[1] * approach_offset\n    approach_z = handle_center[2] + p['approach_height_offset']\n    \n    # Compute yaw to align hand's x-axis with handle normal\n    grasp_yaw = atan2(handle_normal[1], handle_normal[0])\n    \n    # Move to approach position\n    move(approach_x, approach_y, approach_z, yaw=grasp_yaw, speed=0.2)\n    open_gripper()\n    wait(0.3)\n    \n    # Move to grasp position (at handle center)\n    grasp_x = handle_center[0]\n    grasp_y = handle_center[1]\n    grasp_z = handle_center[2]\n    move(grasp_x, grasp_y, grasp_z, yaw=grasp_yaw, speed=0.1)\n    wait(0.2)\n    \n    # Close gripper to grasp handle\n    close_gripper(force=p['grasp_force'])\n    wait(0.5)\n    \n    # Pull drawer open along the front normal direction\n    pull_distance = p['pull_distance']\n    \n    # Execute pull in segments for closed-loop control\n    num_segments = int(p['num_pull_segments'])\n    segment_dist = pull_distance / num_segments\n    \n    for i in range(num_segments):\n        # Check current position\n        current = look()\n        if current:\n            # Update handle position from perception\n            current_handle = current['parts']['handle']\n            current_center = current_handle['center']\n            current_normal = current['parts']['front']['normal']\n        else:\n            # Fall back to dead reckoning\n            current_pos = tcp()\n            current_center = [current_pos[0], current_pos[1], current_pos[2]]\n            current_normal = front_normal\n        \n        # Next waypoint along normal\n        next_x = current_center[0] + current_normal[0] * segment_dist\n        next_y = current_center[1] + current_normal[1] * segment_dist\n        next_z = current_center[2] + p['pull_height_offset']\n        \n        move(next_x, next_y, next_z, yaw=grasp_yaw, speed=p['pull_speed'])\n        wait(0.1)\n    \n    # Release handle\n    open_gripper()\n    wait(0.3)\n    \n    # Retract\n    final_pos = tcp()\n    move(final_pos[0] + front_normal[0] * 0.05, final_pos[1] + front_normal[1] * 0.05, final_pos[2] + 0.05, yaw=grasp_yaw, speed=0.2)\n    \n    return True",
+  "description": "Approach the handle from the front normal direction, grasp it with fingers on either side (hand x-axis aligned with normal), then pull straight out along the drawer's front normal in segments with closed-loop perception updates to track the moving handle.",
+  "check": "look() returns a drawer with parts.front.center moved outward along parts.front.normal by at least 0.08m compared to initial position",
+  "params": {
+    "approach_offset": {
+      "default": 0.095,
+      "range": [
+        0.05,
+        0.15
+      ],
+      "meaning": "distance to approach from along handle normal before grasping"
+    },
+    "approach_height_offset": {
+      "default": 0.0059,
+      "range": [
+        -0.01,
+        0.01
+      ],
+      "meaning": "vertical offset from handle center during approach"
+    },
+    "grasp_force": {
+      "default": 26.9193,
+      "range": [
+        20.0,
+        50.0
+      ],
+      "meaning": "gripper force when grasping handle"
+    },
+    "pull_distance": {
+      "default": 0.0862,
+      "range": [
+        0.08,
+        0.2
+      ],
+      "meaning": "total distance to pull drawer open"
+    },
+    "num_pull_segments": {
+      "default": 3.6182,
+      "range": [
+        2.0,
+        6.0
+      ],
+      "meaning": "number of segments to divide pull motion for closed-loop control"
+    },
+    "pull_speed": {
+      "default": 0.0699,
+      "range": [
+        0.05,
+        0.15
+      ],
+      "meaning": "speed in m/s when pulling drawer"
+    },
+    "pull_height_offset": {
+      "default": -0.0082,
+      "range": [
+        -0.01,
+        0.01
+      ],
+      "meaning": "vertical offset during pull to maintain grasp"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261101-212113_studio/create_open_drawer",
+      "date": "2026-11-01",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "claude_cli",
+        "model": "sonnet",
+        "prompt_version": "4",
+        "input_hash": "974497888004",
+        "cached": false,
+        "repairs": 0,
+        "latency_s": 22.17
+      },
+      "attempts": 1,
+      "capability": "open_drawer",
+      "task": "open_drawer",
+      "description": "pull a drawer open: grasp its handle and slide the drawer out along the front's outward normal",
+      "trials_simulated": 522,
+      "results": {
+        "held_out": [
+          0,
+          16,
+          16
+        ],
+        "p_value": 1.5e-05
+      }
+    }
+  ]
+}

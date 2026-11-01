@@ -54,7 +54,7 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
     """patches: parameter patches per (skill, shape group of the item); explicit overrides win over patches.
     feasibility: verdicts from feasibility.assess to act on (motion cards where no grasp fits, joint goals through
     their open_<template> card, missing capabilities reported up front); None keeps the plain grasp plan."""
-    from ..skills.router import patch_for, score, shape_group
+    from ..skills.router import patch_for, pick_motion, shape_group
     allowed = allowed_grasps or grasp_preference(cards)
     overrides = overrides or {}
     templates = {o["id"]: o["template"] for o in task["objects"]}
@@ -63,7 +63,7 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
 
     def motion_step(g, v):
         desc = percepts.get(g["obj"])
-        card = max(v["skills"], key=lambda n: score(performance or {}, n, shape_group(desc)) if desc else 0)
+        card = pick_motion(cards, v["skills"], performance or {}, shape_group(desc)) if desc else v["skills"][0]
         return {"obj": g["obj"], "target": g.get("target"), "goal": g, "motion": card,
                 "routing": {"reason": f"feasibility: {v['reason']}", "card": card}}
     # Moving parts first (opening a drawer does not depend on anything else being placed).

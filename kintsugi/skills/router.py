@@ -79,3 +79,21 @@ def route(candidates: list[str], desc: dict, perf: dict) -> tuple[str, dict]:
     scored = [(score(perf, c, g), -i, c) for i, c in enumerate(candidates)]
     best = max(scored)[2]
     return best, {"group": g, "scores": {c: round(s, 3) for s, _, c in scored}}
+
+
+def generation(cards: dict, name: str) -> int:
+    """How many revisions a card descends from (its lineage parent chain). A revision passed its parent's own
+    verification scenes plus the ones its parent failed, so where no evidence separates them it is preferred."""
+    n, seen = 0, set()
+    while name in cards and name not in seen:
+        seen.add(name)
+        parent = ((cards[name].get("lineage") or [{}])[0].get("parent") or {}).get("card")
+        if not parent or parent not in cards:
+            break
+        n, name = n + 1, parent
+    return n
+
+
+def pick_motion(cards: dict, names: list[str], perf: dict, group: str) -> str:
+    """Among motion cards of one kind: best measured success on the shape group, then the newest revision."""
+    return max(names, key=lambda n: (score(perf, n, group), generation(cards, n)))

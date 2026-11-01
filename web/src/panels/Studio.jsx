@@ -9,7 +9,7 @@ const LABELS = {
   missed_grasp: "missed the grasp", weak_grasp: "grasp too weak", collision: "hit something", drop: "dropped it",
   wrong_place: "ended in the wrong place", unreachable: "out of reach", constraint_violation: "broke a constraint",
   not_attempted: "not attempted", episode_error: "scene error", precondition_failed: "no skill fits",
-  object_not_perceived: "could not see the object", tipped_over: "tipped over", wrong_order: "done out of order",
+  object_not_perceived: "could not see the object", tipped_over: "tipped over", wrong_order: "done out of order", goal_lost: "undone afterwards", goal_not_met: "goal not reached",
 };
 const label = (l) => LABELS[l] || nice(l);
 const OUTCOMES = {
@@ -18,6 +18,9 @@ const OUTCOMES = {
   no_patch_passed: "the failure happens after the grasp and no parameter patch passed the gates",
   no_feasible_candidates: "no grasp candidate fits the gripper and is reachable",
   no_candidate_passed_gates: "candidates were found, but none passed every gate (held-out objects, no regressions)",
+  not_reproduced: "it did not fail again when measured on more scenes",
+  failed_gates: "revisions were found, but none both fixed the failure and kept working where the old skill works",
+  no_working_proposal: "no revised motion worked in the search",
 };
 const COLORS = { red: "#d0453b", green: "#3f9d4f", blue: "#3b6fd0", yellow: "#e2b93b", orange: "#e5813a",
   purple: "#8a5cc7", white: "#eeeeee", black: "#333", grey: "#999", gray: "#999", brown: "#8a5a3c", pink: "#e58fb5" };
@@ -414,7 +417,8 @@ function Outcome({ result, open }) {
             <ul className="clusters">
               {repair.clusters.map((c, i) => {
                 const r = c.repair || {};
-                const what = r.promoted ? `new skill ${r.promoted}` : r.patched ? `patch ${r.patched.name || JSON.stringify(r.patched.values || "")}`
+                const what = r.promoted && r.parent ? `revised ${r.parent.card} → ${r.promoted} (the old version stays in the library)`
+                  : r.promoted ? `new skill ${r.promoted}` : r.patched ? `patch ${r.patched.name || JSON.stringify(r.patched.values || "")}`
                   : r.routed ? `use ${r.routed.card} instead of ${r.routed.instead_of || c.skill}` : null;
                 return (
                   <li key={i}>

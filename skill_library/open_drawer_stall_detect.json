@@ -1,0 +1,154 @@
+{
+  "name": "open_drawer_stall_detect",
+  "version": 1,
+  "kind": "open_drawer",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    handle = obj['parts']['handle']\n    front = obj['parts']['front']\n    \n    # Grasp the handle using the part-level primitive\n    success = grasp_part(\n        handle,\n        approach=p['approach_dist'],\n        height=p['grasp_height_offset'],\n        depth=p['grasp_depth'],\n        force=p['grasp_force'],\n        from_above=0\n    )\n    \n    if not success:\n        return False\n    \n    wait(0.3)\n    \n    # Pull along the front normal until the drawer stalls at its limit\n    front_normal = front['normal']\n    dx = front_normal[0]\n    dy = front_normal[1]\n    \n    result = move_linear(\n        dx, dy, dz=p['pull_height_change'],\n        dist=p['max_pull_dist'],\n        speed=p['pull_speed'],\n        until_stall=1,\n        stall_lag=p['stall_lag']\n    )\n    \n    wait(0.2)\n    \n    # Release the handle\n    release()\n    wait(0.2)\n    \n    # Retreat\n    retreat(dz=p['retreat_height'])\n    \n    return True",
+  "description": "Grasp the handle with the part-level grasp primitive, then use move_linear with stall detection to pull the drawer out. The motion automatically stops when the drawer reaches its travel limit (whether 9 cm or 12 cm), preventing over-pull that could cause the grip to slip or push the drawer back.",
+  "check": "look() shows the drawer's front has moved outward by at least 8 cm from its initial position",
+  "params": {
+    "approach_dist": {
+      "default": 0.105,
+      "range": [
+        0.05,
+        0.12
+      ],
+      "meaning": "distance to approach from along handle normal before grasping"
+    },
+    "grasp_height_offset": {
+      "default": -0.0068,
+      "range": [
+        -0.01,
+        0.01
+      ],
+      "meaning": "vertical offset from handle center when grasping"
+    },
+    "grasp_depth": {
+      "default": -0.0045,
+      "range": [
+        -0.005,
+        0.005
+      ],
+      "meaning": "how far to reach into the object when grasping handle"
+    },
+    "grasp_force": {
+      "default": 25.699,
+      "range": [
+        20.0,
+        35.0
+      ],
+      "meaning": "gripper force when holding the handle"
+    },
+    "pull_height_change": {
+      "default": -0.0072,
+      "range": [
+        -0.01,
+        0.01
+      ],
+      "meaning": "vertical movement during pull (positive = lift slightly)"
+    },
+    "max_pull_dist": {
+      "default": 0.1266,
+      "range": [
+        0.1,
+        0.2
+      ],
+      "meaning": "maximum pull distance; motion stops early when drawer stalls"
+    },
+    "pull_speed": {
+      "default": 0.0807,
+      "range": [
+        0.04,
+        0.1
+      ],
+      "meaning": "speed of pulling motion in m/s"
+    },
+    "stall_lag": {
+      "default": 0.0191,
+      "range": [
+        0.008,
+        0.02
+      ],
+      "meaning": "lag threshold to detect when drawer has reached its limit"
+    },
+    "retreat_height": {
+      "default": 0.0767,
+      "range": [
+        0.05,
+        0.12
+      ],
+      "meaning": "how high to lift hand after releasing"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "revision",
+      "run_id": "20261101-221939_studio/repair/revise_open_drawer",
+      "date": "2026-11-01",
+      "parent": {
+        "card": "open_drawer",
+        "version": 1
+      },
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "claude_cli",
+        "model": "sonnet",
+        "prompt_version": "5",
+        "input_hash": "c55b7b461e09",
+        "cached": false,
+        "repairs": 0,
+        "latency_s": 25.21
+      },
+      "attempts": 1,
+      "capability": "open_drawer",
+      "task": "open_short_drawer",
+      "task_spec": {
+        "name": "open_short_drawer",
+        "prompt": "Open the short drawer (it only slides out 9 cm).",
+        "objects": [
+          {
+            "id": "drawer",
+            "template": "drawer",
+            "role": "item",
+            "params": {
+              "width": 0.2,
+              "depth": 0.16,
+              "height": 0.1,
+              "travel": 0.09,
+              "damping": 1,
+              "color": "brown"
+            }
+          }
+        ],
+        "goal": [
+          {
+            "pred": "joint",
+            "obj": "drawer",
+            "op": ">=",
+            "value": 0.08
+          }
+        ],
+        "constraints": [],
+        "obstacles": []
+      },
+      "program": "drawer = find_one(kind=\"drawer\")\nuse(\"open_drawer\", drawer)",
+      "description": "pull a drawer open: grasp its handle and slide the drawer out along the front's outward normal",
+      "why": "open_drawer failed {'goal_lost': 8} on 'Open the short drawer (it only slides out 9 cm).'",
+      "trials_simulated": 663,
+      "results": {
+        "fix": [
+          1,
+          16,
+          16
+        ],
+        "p_value": 3.1e-05,
+        "hold": [
+          16,
+          16,
+          16
+        ]
+      }
+    }
+  ]
+}

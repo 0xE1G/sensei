@@ -310,6 +310,7 @@ class SkillCreator:
         card["lineage"] = [{"version": 1, "source": "model-written primitive", "run_id": self.run_id,
                             "date": time.strftime("%Y-%m-%d"), "written_by": meta, "attempts": attempts,
                             "capability": self.capability, "task": self.task_label,
+                            "task_spec": self.task_spec, "program": self.program,
                             "description": self.cap["description"],
                             "trials_simulated": self.report["trials_simulated"],
                             "results": {"held_out": [gate["held_out"]["before"], gate["held_out"]["success"],

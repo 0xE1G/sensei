@@ -30,7 +30,7 @@ app = FastAPI(title="Kintsugi")
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 
 KINDS = [("_explore_", "explore"), ("_explore", "explore"), ("_investigate_", "investigation"), ("_failsearch", "failure_search"), ("_investigate", "investigation"),
-         ("_create_", "create_skill"), ("_transfer_", "transfer"), ("_verify_program", "verify_program"),
+         ("_create_", "create_skill"), ("_revise_", "create_skill"), ("_transfer_", "transfer"), ("_verify_program", "verify_program"),
          ("_auto_repair", "auto_repair"), ("_measure_recovery", "recovery"), ("_quick_check", "quick_check")]
 
 

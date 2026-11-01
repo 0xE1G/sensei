@@ -77,6 +77,24 @@
    ]
   }
  },
+ "open_drawer": {
+  "solid-wide-tall": {
+   "sources": [
+    "20261101-221939_studio/repair/revise_open_drawer"
+   ],
+   "success": 17,
+   "trials": 32
+  }
+ },
+ "open_drawer_stall_detect": {
+  "solid-wide-tall": {
+   "sources": [
+    "20261101-221939_studio/repair/revise_open_drawer"
+   ],
+   "success": 32,
+   "trials": 32
+  }
+ },
  "rim_pinch": {
   "hollow-narrow-short": {
    "sources": [

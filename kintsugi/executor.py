@@ -321,6 +321,15 @@ class Episode:
                 extra = {**(extra or {}), "missing_capability": cap,
                          "missing_call": {"capability": cap, "obj": miss["obj"], "target": miss.get("target")}}
         final = self.monitor.check_goal(self.task["goal"])
+        # A goal reached right after its step but lost by the end (a drawer sliding back, an object falling off a
+        # tray later): the step did not really succeed. Label it, so repairs see the failure.
+        for g in final:
+            if not g["ok"]:
+                st = next((r for r in reversed(self.records) if r.get("obj") == g.get("obj") and r.get("ok")), None)
+                if st is not None:
+                    st["ok"], st["label"] = False, "goal_lost"
+                    if "measured" in g:
+                        st["final_measured"] = g["measured"]
         final_constraints = self.monitor.check_constraints(self.constraints)
         done = [o for o in self.completed if o in self.order]
         order_ok = done == [o for o in self.order if o in done] and len(done) == len(self.order)

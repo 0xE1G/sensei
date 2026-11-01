@@ -492,6 +492,35 @@ round started by the search (see status).
    - Results: slide_plate fixed plan 0/16 -> 16/16 with feasibility; pick-else-push program 8/8 both ways, 25% less
      robot time (no doomed grasp); sort_with_bowl / stack_by_size / balls_in_basket 16/16 both ways; standard tasks
      new code vs last commit (feasibility off) 36/36 identical. Smoke 25/25.
+8i. **One lifecycle for every skill + part-level motions (2026-11-01)**:
+   - Part-level motion API (primitive_code.py, fixed, generic, on perceived parts/directions): grasp_part(part,
+     approach, height, depth, force, from_above), move_linear(dx, dy, dz, dist, speed, until_stall, stall_lag),
+     move_arc(cx, cy, angle, ...), release, retreat, holding. Line/arc motions step 1 cm and stop by themselves when
+     the hand falls stall_lag behind its path (end stop) or the grip is lost (proprioception), then stop pulling
+     (`Robot.move_to(correct=False)`: no sag correction that would push harder into the stop). Trials record
+     `part_motions` and `hand_path_mm`. propose prompt v5 documents them and prefers stopping at the end stop.
+     Stand-ins (open_motions) and the oracle's reference motions now use them: 9 cm drawers 12/12 (fixed pull 11/12),
+     drawers 12/12, doors 10-12/12 and 3 s faster.
+   - `goal_lost`: a goal met right after its step but not at the end (the drawer slid back after release, an object
+     fell off later) now fails that step with this label (+ `final_measured`); before, such episodes failed with no
+     label and the Studio saw nothing to repair. Standard tasks: 36/36 identical vs the last commit.
+   - `kintsugi/revise_skill.py` SkillReviser (SkillCreator subclass): auto_repair sends clusters whose failing skill
+     is a model-written card here (grasp skills still go to the explorer). before (rare/not reproduced stop) ->
+     settings (same code, search + Optuna) -> rewrite (model gets the code, observable evidence, the scenes where it
+     works; 3 strategies, search, tune, one more revision with gate feedback) -> gate: FIX (failing request, dev
+     seeds, McNemar improve, >= 70%), HOLD (the card's original request from its lineage: not significantly worse,
+     >= 70%), REGRESSION -> promote a NEW card beside the old one (lineage parent + why + results; task_spec and
+     program now stored in every created card's lineage) + evidence for both on the object's shape group. Router
+     for motion cards (`router.pick_motion`): measured score, then `generation` (newest revision) on ties.
+     Candidates run with every card of that kind removed, so the candidate is the one used.
+   - Drawer travel range now 0.08-0.15 m (short drawers can be requested).
+   - Result (Studio job, Claude, "Open the short drawer (9 cm)"): 0/8 (goal_lost: overpulled, bounced back) -> expert
+     solves all 8 -> revision: settings alone best 2/3 -> Claude rewrote it with grasp_part + move_linear until stall
+     (41/41 settings work) -> tune 8/8 -> gate fix 16/16 vs 1/16 (p 3.1e-05), hold 16/16 vs 16/16, regression pass ->
+     `open_drawer_stall_detect` beside `open_drawer` -> re-run 8/8; 17.5 min. Test-split check (16 fresh scenes each):
+     normal drawers old 16/16, now 16/16; 9 cm old 1/16, now 16/16; 8.5 cm (never seen, 5 mm margin) old 1/16, now
+     11/16. Smoke 25/25 (drawer check uses a 9 cm drawer).
+   - Note: skill_library/open_drawer.json (learned in a Studio run) and open_drawer_stall_detect.json are untracked.
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked

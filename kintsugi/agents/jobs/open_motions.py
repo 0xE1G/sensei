@@ -74,11 +74,71 @@ ARC_PARAMS = {
 }
 
 
+# Part-level versions (the motion API's grasp_part / move_linear / move_arc): pull or swing until the hand stalls
+# against the end stop instead of a fixed distance, so short drawers are not overpulled (they bounced back).
+PULL_STALL_CODE = '''def primitive(obj, target, p):
+    parts = obj['parts']
+    h = parts['handle']
+    n = parts['front']['normal'] if 'front' in parts else h['normal']
+    if not grasp_part(h, approach=p['clearance'], height=-p['grip_depth'], force=p['force'], from_above=1):
+        release()
+        retreat(0.08)
+        return False
+    move_linear(n[0], n[1], 0.0, dist=p['max_pull'], speed=p['speed'], until_stall=1, stall_lag=p['stall_lag'])
+    release()
+    retreat(0.08)
+    return True
+'''
+
+PULL_STALL_PARAMS = {
+    "grip_depth": PULL_PARAMS["grip_depth"], "clearance": PULL_PARAMS["clearance"], "force": PULL_PARAMS["force"],
+    "max_pull": {"default": 0.16, "range": [0.06, 0.2], "meaning": "longest pull along the front's normal (m); the pull "
+                                                                    "stops earlier when the drawer reaches its end stop"},
+    "speed": PULL_PARAMS["speed"],
+    "stall_lag": {"default": 0.012, "range": [0.006, 0.025], "meaning": "how far the hand may fall behind its path "
+                                                                        "before the pull counts as stopped (m)"},
+}
+
+ARC_STALL_CODE = '''def primitive(obj, target, p):
+    parts = obj['parts']
+    h = parts['handle']
+    f = parts['front']
+    hx, hy, hz = h['tip']
+    nx, ny = f['normal']
+    tx, ty = -ny, nx
+    fx, fy = f['center'][0], f['center'][1]
+    side = 1.0 if (hx - fx) * tx + (hy - fy) * ty >= 0 else -1.0
+    half = f['width'] / 2 + p['hinge_shift']
+    cx, cy = fx - side * tx * half, fy - side * ty * half
+    a0 = atan2(hy - cy, hx - cx)
+    turn = 1.0 if (-sin(a0)) * nx + cos(a0) * ny >= 0 else -1.0
+    if not grasp_part(h, approach=p['clearance'], height=-p['grip_depth'], force=p['force'], from_above=1):
+        release()
+        retreat(0.08)
+        return False
+    move_arc(cx, cy, angle=turn * p['angle'], speed=p['speed'], until_stall=1, stall_lag=p['stall_lag'])
+    release()
+    retreat(0.08)
+    return True
+'''
+
+ARC_STALL_PARAMS = {
+    "grip_depth": ARC_PARAMS["grip_depth"], "clearance": ARC_PARAMS["clearance"], "force": ARC_PARAMS["force"],
+    "angle": {"default": 85.0, "range": [40.0, 110.0], "meaning": "largest swing around the hinge (deg); stops "
+                                                                  "earlier at the door's end stop"},
+    "hinge_shift": ARC_PARAMS["hinge_shift"], "speed": ARC_PARAMS["speed"],
+    "stall_lag": {"default": 0.015, "range": [0.006, 0.03], "meaning": "how far the hand may fall behind the arc "
+                                                                       "before the swing counts as stopped (m)"},
+}
+
+
 def stand_in(capability: str) -> dict:
-    """propose_primitive output for an opening capability: straight pull, or an arc for doors / hinges."""
-    arc = any(w in capability for w in ("door", "hinge", "lid", "swing"))
-    return {"name": "open_arc_pull" if arc else "open_straight_pull", "code": ARC_CODE if arc else PULL_CODE,
-            "params": ARC_PARAMS if arc else PULL_PARAMS,
+    """propose_primitive output for an opening capability: straight pull, or an arc for doors / hinges. Both are
+    written on the part-level motion API and stop at the end stop (the fixed-distance versions above are kept for
+    comparison: they overpull short drawers)."""
+    arc = any(w in capability.replace("slide", "") for w in ("door", "hinge", "lid", "swing"))
+    return {"name": "open_arc_pull" if arc else "open_straight_pull", "code": ARC_STALL_CODE if arc else PULL_STALL_CODE,
+            "params": ARC_STALL_PARAMS if arc else PULL_STALL_PARAMS,
             "check": "the moving part opened by the goal amount",
             "explanation": ("grasp the handle post and pull it along the arc around the hinge (assumed at the front's "
                             "edge opposite the handle)") if arc else

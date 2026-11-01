@@ -17,6 +17,7 @@ import pathlib
 import time
 
 from .runner import ROOT, TrialPool, trial_cfg
+from .skills.library import load_cards
 from .sim.templates import RANGES
 from .tasks.specs import TASKS
 
@@ -108,6 +109,30 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
         report["clusters"].append(entry)
         if len(cl) < min_failures:
             entry["action"] = f"skipped: fewer than {min_failures} valid failures"
+            continue
+        card = load_cards().get(skill) or {}
+        if card.get("impl") == "generated":
+            # A model-written skill (push, open_drawer, ...): revise it with the same lifecycle that created it
+            # (settings, then a rewrite with the failing evidence); the gates also require it to hold where the old
+            # card was verified, and the old card stays in the library.
+            from .revise_skill import SkillReviser
+            rec0 = json.loads(pathlib.Path(cl[0]["source"]).read_text())
+            spec = {k: v for k, v in cl[0]["spec"].items() if k not in ("program", "program_source")}
+            _log(f"cluster {kind}/{skill} ({len(cl)} failures, {entry['labels']}): model-written skill -> revision")
+            rv = SkillReviser(skill, spec, rec0.get("program") or f"use('{card['kind']}', find_one(id='{cl[0]['obj']}'))",
+                              obj=cl[0]["obj"], workers=workers, client=client, run_id=f"{run_id}/revise_{skill}",
+                              min_fail_rate=(explorer_kwargs or {}).get("min_fail_rate"))
+            if dry_run:
+                rv.promote = lambda c, *a, **k: rv.report.update(promoted={"card": c["name"], "dry_run": True})
+            rr = rv.run()
+            entry["action"] = "revision"
+            entry["repair"] = {"run_id": rr["run_id"], "outcome": rr.get("outcome"),
+                               "rare": ({"valid_failures": b["trials"] - b["success"], "trials": b["trials"]}
+                                        if (b := rr.get("phases", {}).get("before", {})).get("rare") else None),
+                               "promoted": (rr.get("promoted") or {}).get("card"),
+                               "parent": rr.get("parent")}
+            _log(f"cluster {kind}/{skill}: {entry['repair']['outcome']}")
+            (out / "report.json").write_text(json.dumps(report, indent=1, default=float))
             continue
         # Investigate: confirmed one-change fixes become hints for the explorer.
         inv = Investigator(workers, client=client, run_id=f"{run_id}/investigate_{kind}_{skill}")

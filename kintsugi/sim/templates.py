@@ -39,7 +39,7 @@ RANGES = {
     "tray":     {"width": (0.14, 0.30), "depth": (0.12, 0.24)},
     "zone":     {"width": (0.08, 0.25), "depth": (0.08, 0.25)},
     # Objects with a moving part (a fixed cabinet + a part on a joint). Their front faces the robot.
-    "drawer":   {"width": (0.16, 0.26), "depth": (0.14, 0.20), "height": (0.08, 0.12), "travel": (0.10, 0.15),
+    "drawer":   {"width": (0.16, 0.26), "depth": (0.14, 0.20), "height": (0.08, 0.12), "travel": (0.08, 0.15),
                  "damping": (0.5, 3.0)},
     "door":     {"width": (0.12, 0.20), "depth": (0.12, 0.18), "height": (0.10, 0.16), "hinge_side": (0.0, 1.0),
                  "damping": (0.02, 0.2)},
