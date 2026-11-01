@@ -229,7 +229,25 @@ class Perception:
         for k in ("rim_radius", "rim_z", "floor_z", "half_x", "half_y"):
             if k in meta:
                 out[k] = meta[k] + (float(pos[2]) if k in ("rim_z", "floor_z") else 0.0)
+        if meta.get("articulated"):
+            out["parts"] = self._truth_parts(oid)
         return out
+
+    def _truth_parts(self, oid) -> dict:
+        """True front / handle of a moving part (same fields as describe_part): the front faces its local -x."""
+        m, d = self.scene.model, self.scene.data
+        f = m.geom(f"{oid}__front").id
+        R = d.geom_xmat[f].reshape(3, 3)
+        n = -R[:2, 0] / max(np.linalg.norm(R[:2, 0]), 1e-6)
+        fc, fs = d.geom_xpos[f], m.geom_size[f]
+        front = {"center": [float(v) for v in fc], "tip": [float(v) for v in fc], "normal": [float(n[0]), float(n[1])],
+                 "width": float(2 * fs[1]), "height": float(2 * fs[2])}
+        h = m.geom(f"{oid}__handle_post").id
+        hc, hs = d.geom_xpos[h], m.geom_size[h]
+        # tip = middle of the post the fingers pinch (what depth perception reports as the outermost points)
+        handle = {"center": [float(v) for v in hc], "tip": [float(v) for v in hc], "normal": front["normal"],
+                  "width": float(2 * hs[0]), "height": float(2 * hs[2])}
+        return {"front": front, "handle": handle}
 
     def close(self):
         for c in self.cams + self.part_cams:

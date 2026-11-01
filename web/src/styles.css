@@ -900,3 +900,7 @@ h1, h2, h3, .page-head h2, .kpi-value, .big, .banner-text, .exp-header h2, .side
 .suggestions button { padding: 6px 13px; background: var(--panel); }
 .tile.viewing { outline: 2px solid var(--ink); outline-offset: 2px; }
 .goal-measure { color: var(--muted); font-size: 12.5px; font-family: var(--font-mono); }
+.goal-rows li:has(.feas) { flex-wrap: wrap; row-gap: 3px; }
+.feas { flex-basis: 100%; padding-left: 28px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+        overflow-wrap: anywhere; cursor: help; }
+.feas-fallback, .feas-missing, .feas-unseen, .feas-unreachable { color: var(--hypothesis); }

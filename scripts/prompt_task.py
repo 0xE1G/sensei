@@ -84,7 +84,8 @@ def main():
                                                                             "program_source": source})]
     for label, spec in runs:
         s = run_batch(spec["name"], n=a.n, workers=a.workers, task_spec=spec, oracle=True, save_video=False,
-                      save_poses=False, success_sample=0, save_failures=False, progress=False, recovery=a.recovery)
+                      save_poses=False, success_sample=0, save_failures=False, progress=False, recovery=a.recovery,
+                      feasibility=True)
         print(label + ":", json.dumps({k: s[k] for k in ("run_id", "success", "trials", "success_ci95",
                                                          "failure_labels", "oracle")}))
     return 0

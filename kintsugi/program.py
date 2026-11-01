@@ -135,6 +135,13 @@ def run_program(ep, code: str) -> dict:
         oid = _id(obj)
         if grasp is not None and (grasp not in ep.cards or ep.cards[grasp].get("kind") != "grasp"):
             raise ProgramError(f"unknown grasp {grasp!r}; library grasps: {grasp_preference(ep.cards)}")
+        # Acting on feasibility: no grasp fits this object but a verified motion covers its goal (a plate onto a
+        # tray -> push): do not try a grasp that would hit it; the program's fallback (push / use) runs instead.
+        v = next((f for f in ep.feasibility if f["obj"] == oid), None)
+        if grasp is None and ep.act_on_feasibility and v and v["verdict"] == "motion":
+            log.append({"call": "pick", "obj": oid, "ok": False, "label": "no_grasp_fits", "skipped": True,
+                        "reason": v["reason"]})
+            return False
         tried = []
         # With recovery on (and no grasp forced by the program), a failed pick is retried on a fresh percept with
         # the next verified grasp.

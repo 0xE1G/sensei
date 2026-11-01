@@ -1,169 +1,203 @@
 {
-  "name": "axis_centre_across",
-  "version": 1,
-  "kind": "grasp",
-  "impl": "axis_pinch",
-  "description": "axis_centre grasp, fingers closing acrossly; found by exploration after top_grasp failed on bar (collision).",
-  "requires": {
-    "hollow": false,
-    "min_width": 0.088,
-    "max_width": 0.224,
-    "min_height": 0.01,
-    "max_height": 0.049
+ "name": "axis_centre_across",
+ "version": 2,
+ "kind": "grasp",
+ "impl": "axis_pinch",
+ "description": "axis_centre grasp, fingers closing acrossly; found by exploration after top_grasp failed on bar (collision).",
+ "requires": {
+  "hollow": false,
+  "min_width": 0.088,
+  "max_width": 0.224,
+  "min_height": 0.01,
+  "max_height": 0.049,
+  "min_elongation": 1.73
+ },
+ "params": {
+  "along": {
+   "default": 0.3439,
+   "range": [
+    -0.8,
+    0.8
+   ],
+   "unit": "fraction of the half long extent"
   },
-  "params": {
-    "along": {
-      "default": 0.3439,
-      "range": [
-        -0.8,
-        0.8
-      ],
-      "unit": "fraction of the half long extent"
+  "across": {
+   "default": 0.0536,
+   "range": [
+    -0.8,
+    0.8
+   ],
+   "unit": "fraction of the half short extent"
+  },
+  "depth": {
+   "default": 0.004,
+   "range": [
+    0.004,
+    0.06
+   ],
+   "unit": "m below the top"
+  },
+  "close_deg": {
+   "default": -24.3518,
+   "range": [
+    -90,
+    90
+   ],
+   "unit": "closing direction vs the short axis (0 = across the long axis)"
+  },
+  "tilt_deg": {
+   "default": -4.3163,
+   "range": [
+    -30,
+    30
+   ]
+  },
+  "approach_height": {
+   "default": 0.08,
+   "range": [
+    0.04,
+    0.15
+   ]
+  },
+  "descend_speed": {
+   "default": 0.1,
+   "range": [
+    0.04,
+    0.3
+   ]
+  },
+  "grip_force": {
+   "default": 30.0,
+   "range": [
+    5,
+    40
+   ]
+  }
+ },
+ "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+ "lineage": [
+  {
+   "version": 1,
+   "source": "exploration",
+   "run_id": "20261031-003922_explore_probe_bar",
+   "date": "2026-10-31",
+   "parent": {
+    "primitive": "axis_pinch",
+    "version": 1
+   },
+   "trigger": {
+    "skill": "top_grasp",
+    "skill_version": 1,
+    "label": "collision",
+    "labels": {
+     "collision": 10,
+     "unreachable": 1
     },
-    "across": {
-      "default": 0.0536,
-      "range": [
-        -0.8,
-        0.8
-      ],
-      "unit": "fraction of the half short extent"
-    },
-    "depth": {
-      "default": 0.004,
-      "range": [
-        0.004,
-        0.06
-      ],
-      "unit": "m below the top"
-    },
-    "close_deg": {
-      "default": -24.3518,
-      "range": [
-        -90,
-        90
-      ],
-      "unit": "closing direction vs the short axis (0 = across the long axis)"
-    },
-    "tilt_deg": {
-      "default": -4.3163,
-      "range": [
-        -30,
-        30
-      ]
-    },
-    "approach_height": {
-      "default": 0.08,
-      "range": [
-        0.04,
-        0.15
-      ]
-    },
-    "descend_speed": {
-      "default": 0.1,
-      "range": [
-        0.04,
-        0.3
-      ]
-    },
-    "grip_force": {
-      "default": 30.0,
-      "range": [
-        5,
-        40
-      ]
+    "obj": "bar",
+    "task": "probe",
+    "task_kwargs": {
+     "region": {
+      "template": "bar",
+      "params": {
+       "length": [
+        0.0805,
+        0.2195
+       ],
+       "width": [
+        0.0202,
+        0.0442
+       ],
+       "height": [
+        0.02,
+        0.045
+       ],
+       "mass": [
+        0.0213,
+        0.2883
+       ],
+       "friction": [
+        0.4342,
+        1.4886
+       ]
+      }
+     }
     }
+   },
+   "family": "axis_centre_across",
+   "trials_simulated": 832,
+   "tune_best_train_rate": 1.0,
+   "results": {
+    "cluster": [
+     0,
+     10,
+     11
+    ],
+    "held_out": {
+     "before": 0.562,
+     "after": 1.0,
+     "ci95": [
+      0.806,
+      1.0
+     ],
+     "trials": 16
+    }
+   },
+   "diff": {
+    "along": [
+     0.0,
+     0.3439
+    ],
+    "across": [
+     0.0,
+     0.0536
+    ],
+    "depth": [
+     0.015,
+     0.004
+    ],
+    "close_deg": [
+     0,
+     -24.3518
+    ],
+    "tilt_deg": [
+     0,
+     -4.3163
+    ]
+   },
+   "requires_diff": null
   },
-  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
-  "lineage": [
+  {
+   "version": 2,
+   "source": "precondition audit",
+   "date": "2026-11-01",
+   "parent": {
+    "card": "axis_centre_across",
+    "version": 1
+   },
+   "reason": "v1 preconditions used perceived width and height only, so plates (round, elongation ~1.0) of the same size were routed to this bar grasp and collided; the explorer now also derives elongation bounds (0.8 x the smallest elongation of the objects it was found on: bars 2.16-9.39 perceived on 40 trigger-region scenes)",
+   "results": {
+    "bars_dev_32": {
+     "before": "32/32",
+     "after": "32/32"
+    }
+   },
+   "requires_diff": [
     {
-      "version": 1,
-      "source": "exploration",
-      "run_id": "20261031-003922_explore_probe_bar",
-      "date": "2026-10-31",
-      "parent": {
-        "primitive": "axis_pinch",
-        "version": 1
-      },
-      "trigger": {
-        "skill": "top_grasp",
-        "skill_version": 1,
-        "label": "collision",
-        "labels": {
-          "collision": 10,
-          "unreachable": 1
-        },
-        "obj": "bar",
-        "task": "probe",
-        "task_kwargs": {
-          "region": {
-            "template": "bar",
-            "params": {
-              "length": [
-                0.0805,
-                0.2195
-              ],
-              "width": [
-                0.0202,
-                0.0442
-              ],
-              "height": [
-                0.02,
-                0.045
-              ],
-              "mass": [
-                0.0213,
-                0.2883
-              ],
-              "friction": [
-                0.4342,
-                1.4886
-              ]
-            }
-          }
-        }
-      },
-      "family": "axis_centre_across",
-      "trials_simulated": 832,
-      "tune_best_train_rate": 1.0,
-      "results": {
-        "cluster": [
-          0,
-          10,
-          11
-        ],
-        "held_out": {
-          "before": 0.562,
-          "after": 1.0,
-          "ci95": [
-            0.806,
-            1.0
-          ],
-          "trials": 16
-        }
-      },
-      "diff": {
-        "along": [
-          0.0,
-          0.3439
-        ],
-        "across": [
-          0.0,
-          0.0536
-        ],
-        "depth": [
-          0.015,
-          0.004
-        ],
-        "close_deg": [
-          0,
-          -24.3518
-        ],
-        "tilt_deg": [
-          0,
-          -4.3163
-        ]
-      },
-      "requires_diff": null
+     "hollow": false,
+     "min_width": 0.088,
+     "max_width": 0.224,
+     "min_height": 0.01,
+     "max_height": 0.049
+    },
+    {
+     "hollow": false,
+     "min_width": 0.088,
+     "max_width": 0.224,
+     "min_height": 0.01,
+     "max_height": 0.049,
+     "min_elongation": 1.73
     }
-  ]
+   ]
+  }
+ ]
 }

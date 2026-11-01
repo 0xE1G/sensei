@@ -14,7 +14,26 @@ from .skills.library import LIB_DIR, load_cards, seed_library
 
 @functools.lru_cache(maxsize=1)
 def oracle_library() -> dict:
-    return {**seed_library(), **load_cards(LIB_DIR / "reference")}
+    return {**seed_library(), **load_cards(LIB_DIR / "reference"), **reference_motions()}
+
+
+def reference_motions() -> dict:
+    """Hand-written motions for capabilities no grasp covers, at their default parameters (never tuned, never
+    discovered): a two-finger push, and for every template with a moving part an opening motion by joint type
+    (slide -> straight pull, hinge -> arc around the hinge). With ground-truth parts they let the oracle judge
+    push / open scenes instead of calling them unsolvable."""
+    from .agents.jobs.open_motions import stand_in
+    from .agents.jobs.propose_primitive import _push_rule
+    from .sim.templates import ARTICULATED
+
+    def card(kind, prop):
+        return {"name": f"reference_{kind}", "version": 1, "kind": kind, "impl": "generated", "code": prop["code"],
+                "params": prop["params"], "check": prop["check"], "source": "reference (hand-written)"}
+    cards = {"reference_push": card("push", _push_rule({}))}
+    for t, a in ARTICULATED.items():
+        kind = f"open_{t}"
+        cards[f"reference_{kind}"] = card(kind, stand_in("hinge" if a["type"] == "hinge" else "pull"))
+    return cards
 
 
 def run_oracle(task: dict, seed: int, perturb=None) -> dict:
@@ -41,7 +60,7 @@ def run_oracle(task: dict, seed: int, perturb=None) -> dict:
         try:
             rec, _ = run_episode(task, seed=seed, perception_mode="ground_truth", library=lib, perturb=perturb,
                                  allowed_grasps=allowed, overrides=overrides or None, performance={}, patches={},
-                                 program=program or task.get("program"))
+                                 program=program or task.get("program"), feasibility=True)
         except Exception as e:                   # an unbuildable scene is unsolvable, not a crash
             return {**out, "error": f"{type(e).__name__}: {e}"}
         out["attempts"] += 1

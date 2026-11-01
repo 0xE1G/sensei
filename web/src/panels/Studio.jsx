@@ -249,6 +249,18 @@ function ObjChip({ id, objects }) {
   return <span className="obj"><i style={{ background: COLORS[o.params?.color] || "var(--s0)" }} />{nice(id)}</span>;
 }
 
+// What the library can do for one goal, judged from perception before running (feasibility.py).
+const FEAS_TEXT = { grasp: v => `grasp with ${v.skills[0]}`,
+                    motion: v => `${v.capability === "push" ? "no grasp fits · push with" : "use"} ${v.skills[0]}`,
+                    fallback: () => "no grasp fits · will try anyway",
+                    missing: v => `needs a new skill: ${v.capability || v.pred}`, unseen: () => "not seen",
+                    unreachable: () => "out of reach" };
+
+function FeasTag({ v }) {
+  if (!v || !FEAS_TEXT[v.verdict]) return null;
+  return <span className={`feas feas-${v.verdict}`} title={v.reason}>{FEAS_TEXT[v.verdict](v)}</span>;
+}
+
 function PlanCard({ spec, program, programLoading }) {
   const t = spec.task;
   const seq = t.order || [];
@@ -264,6 +276,7 @@ function PlanCard({ spec, program, programLoading }) {
             {g.pred === "on" || g.pred === "inside" ? <><span className="goal-arrow">→</span><ObjChip id={g.target} objects={t.objects} /></>
               : <span className="goal-measure">{measureText(g, t.objects)}</span>}
             {g.upright && <span className="tag">upright</span>}
+            <FeasTag v={(spec.feasibility || []).find(f => f.obj === g.obj)} />
           </li>
         ))}
         {(t.constraints || []).map((c, i) => (

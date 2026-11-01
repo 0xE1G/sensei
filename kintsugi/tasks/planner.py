@@ -31,6 +31,10 @@ def fits(card: dict, desc: dict) -> bool:
         return False
     if "max_height" in req and desc["height"] > req["max_height"]:
         return False
+    if "min_elongation" in req and desc.get("elongation", 1.0) < req["min_elongation"]:
+        return False
+    if "max_elongation" in req and desc.get("elongation", 1.0) > req["max_elongation"]:
+        return False
     return True
 
 
@@ -46,13 +50,32 @@ def choose_grasp(desc: dict, allowed: list[str], cards: dict, performance=None) 
 
 
 def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, overrides=None,
-              performance=None, patches=None) -> list[dict]:
-    """patches: parameter patches per (skill, shape group of the item); explicit overrides win over patches."""
-    from ..skills.router import patch_for, shape_group
+              performance=None, patches=None, feasibility=None) -> list[dict]:
+    """patches: parameter patches per (skill, shape group of the item); explicit overrides win over patches.
+    feasibility: verdicts from feasibility.assess to act on (motion cards where no grasp fits, joint goals through
+    their open_<template> card, missing capabilities reported up front); None keeps the plain grasp plan."""
+    from ..skills.router import patch_for, score, shape_group
     allowed = allowed_grasps or grasp_preference(cards)
     overrides = overrides or {}
     templates = {o["id"]: o["template"] for o in task["objects"]}
     subtasks = []
+    verdicts = {v["obj"]: v for v in feasibility or []}
+
+    def motion_step(g, v):
+        desc = percepts.get(g["obj"])
+        card = max(v["skills"], key=lambda n: score(performance or {}, n, shape_group(desc)) if desc else 0)
+        return {"obj": g["obj"], "target": g.get("target"), "goal": g, "motion": card,
+                "routing": {"reason": f"feasibility: {v['reason']}", "card": card}}
+    # Moving parts first (opening a drawer does not depend on anything else being placed).
+    for g in task["goal"]:
+        v = verdicts.get(g["obj"])
+        if g["pred"] in ("inside", "on") or not v:
+            continue
+        if v["verdict"] == "motion":
+            subtasks.append(motion_step(g, v))
+        elif v["verdict"] == "missing":
+            subtasks.append({"obj": g["obj"], "target": None, "error": "missing_capability", "steps": [],
+                             "routing": {"reason": f"feasibility: {v['reason']}", "capability": v.get("capability")}})
     goals = [g for g in task["goal"] if g["pred"] in ("inside", "on")]
     # Far objects first, so the arm does not sweep over things it already placed.
     goals.sort(key=lambda g: -math.hypot(*percepts[g["obj"]]["center"]) if percepts.get(g["obj"]) else 0)
@@ -76,6 +99,10 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
             continue
         # "grasp_for" forces a grasp for one object only (the explorer trying a candidate on the failing item).
         forced = overrides.get("grasp_for", {}).get(g["obj"]) or overrides.get("grasp_skill")
+        v = verdicts.get(g["obj"])
+        if not forced and v and v["verdict"] == "motion":
+            subtasks.append(motion_step(g, v))
+            continue
         grasp, why = (forced, {"reason": "forced"}) if forced else choose_grasp(desc, allowed, cards, performance)
         mode = "drop" if templates[g["target"]] == "bin" else "place"
         group = shape_group(desc)

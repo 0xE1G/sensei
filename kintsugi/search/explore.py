@@ -94,6 +94,16 @@ def _library_hash(*parts) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:10]
 
 
+def elongation_bounds(els) -> dict:
+    """Shape preconditions beyond size: a card found only on long objects (bars) must not take over round ones of
+    the same size (plates), and one found only on round objects must not take over long ones. 20-25% margin."""
+    if els and min(els) > 1.5:
+        return {"min_elongation": round(0.8 * min(els), 2)}
+    if els and max(els) < 1.5:
+        return {"max_elongation": round(1.25 * max(els), 2)}
+    return {}
+
+
 class Explorer:
     def __init__(self, task: str = "bowl_on_tray", workers: int | None = None, n_before: int = 24,
                  n_candidates: int = 800, per_family: int = 4, family_seeds: int = 4, max_families: int = 4,
@@ -467,6 +477,7 @@ class Explorer:
         hs = [d["height"] for d in self._cluster_descs]
         requires.update(min_width=round(max(0.0, min(ws) - 0.01), 3), max_width=round(max(ws) + 0.01, 3),
                         min_height=round(max(0.0, min(hs) - 0.01), 3), max_height=round(max(hs) + 0.01, 3))
+        requires.update(elongation_bounds([d.get("elongation", 1.0) for d in self._cluster_descs]))
         return {
             "name": name, "version": (old["version"] + 1) if old else 1, "kind": "grasp", "impl": prim["name"],
             "description": (f"{family['anchor']} grasp, fingers closing "

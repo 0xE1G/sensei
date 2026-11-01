@@ -24,12 +24,16 @@ class Episode:
 
     def __init__(self, task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                  overrides=None, record_poses=False, record_video=False, perturb=None, extra_cards=None,
-                 library=None, performance=None, positions=None, patches=None, recovery=0, live=None):
+                 library=None, performance=None, positions=None, patches=None, recovery=0, live=None,
+                 feasibility=False):
         """live: a LiveWriter streaming poses to the web app while this episode runs.
         recovery: retries per item after a failed step (re-perceive, next verified grasp); 0 in experiments,
-        so searches and gates measure the skills themselves."""
+        so searches and gates measure the skills themselves.
+        feasibility: the fixed plan acts on feasibility verdicts (a verified motion where no grasp fits, joint goals
+        through their opening skill); off in experiments, like recovery."""
         self.t0 = time.time()
         self.recovery = int(recovery)
+        self.act_on_feasibility = bool(feasibility)
         self.task, self.seed, self.perception_mode = task, seed, perception_mode
         self.allowed_grasps, self.overrides = allowed_grasps, overrides or {}
         self.scene = build_scene(task, seed=seed, perturb=perturb, positions=positions)
@@ -55,6 +59,8 @@ class Episode:
         self.used_cards = set()
         self.order = list(task.get("order") or [])    # required completion sequence (item ids), if any
         self.completed = []                            # items in the order their goal was first reached
+        from .feasibility import assess
+        self.feasibility = assess(task, self.percepts, self.cards, allowed_grasps)   # per goal, before any motion
 
     # ------------------------------------------------------------------ perception
     def describe(self, obj, exclude=()):
@@ -250,13 +256,27 @@ class Episode:
         return self.percepts[target]
 
     # ------------------------------------------------------------------ fixed plan
+    def run_motion(self, obj, target, card, routing=None) -> dict:
+        """One subtask done by a motion card (push, open_<x>): perceive, run the primitive, check the goal."""
+        srec = self.begin(obj, target, routing)
+        if srec["_desc"] is None:
+            return self.finish(srec, self.goal_for(obj))
+        from .skills.router import patch_for, shape_group
+        tdesc = self.perc.perceive([target])[target] if target else None
+        prm = {**patch_for(self.patches, card, shape_group(srec["_desc"])), **self.overrides.get(card, {})}
+        self.push(srec, card, tdesc, prm)
+        return self.finish(srec, self.goal_for(obj))
+
     def run_plan(self):
         plan = make_plan(self.task, self.percepts, self.cards, self.allowed_grasps, self.overrides,
-                         self.performance, self.patches)
+                         self.performance, self.patches, self.feasibility if self.act_on_feasibility else None)
         for st in plan:
             if st.get("error"):
                 self.records.append({"obj": st["obj"], "target": st["target"], "trace": [], "label": st["error"],
                                      "ok": False, "routing": st.get("routing")})
+                continue
+            if st.get("motion"):
+                self.run_motion(st["obj"], st["target"], st["motion"], st["routing"])
                 continue
             steps, tried = st["steps"], []
             for attempt in range(1 + self.recovery):
@@ -293,6 +313,13 @@ class Episode:
 
     # ------------------------------------------------------------------ result
     def record(self, extra=None) -> dict:
+        if not (extra or {}).get("missing_capability"):
+            # the fixed plan found a goal no library skill covers (feasibility): record it like a program's use() call
+            miss = next((r for r in self.records if r.get("label") == "missing_capability"), None)
+            if miss and (miss.get("routing") or {}).get("capability"):
+                cap = miss["routing"]["capability"]
+                extra = {**(extra or {}), "missing_capability": cap,
+                         "missing_call": {"capability": cap, "obj": miss["obj"], "target": miss.get("target")}}
         final = self.monitor.check_goal(self.task["goal"])
         final_constraints = self.monitor.check_constraints(self.constraints)
         done = [o for o in self.completed if o in self.order]
@@ -310,6 +337,7 @@ class Episode:
             "objects": {k: {kk: vv for kk, vv in v.items() if kk != "params"} | {"params": v["params"]}
                         for k, v in self.scene.objects.items()},
             "percepts": self.percepts, "task_spec": self.task, "recovery": self.recovery,
+            "feasibility": self.feasibility, "act_on_feasibility": self.act_on_feasibility,
             "recovery_attempts": sum(1 for r in self.records if r.get("attempt")), **(extra or {}),
         }
         return rec
@@ -323,13 +351,13 @@ class Episode:
 def run_episode(task: dict, seed: int = 0, perception_mode: str = "sim", allowed_grasps=None,
                 overrides=None, record_poses=False, record_video=False, perturb=None,
                 extra_cards=None, library=None, performance=None, positions=None,
-                patches=None, program=None, recovery=0, live=None) -> tuple[dict, Recorder]:
+                patches=None, program=None, recovery=0, live=None, feasibility=False) -> tuple[dict, Recorder]:
     """`library` replaces the active skill library (a snapshot, e.g. the seed library); `extra_cards` adds
     cards that are not in it (exploration candidates, references); `positions` ({id: (x, y, yaw)}) rebuilds an
     exact earlier layout (one-change replays); `program` (or task["program"]) runs a model-written plan program
     instead of the planner's fixed plan."""
     ep = Episode(task, seed, perception_mode, allowed_grasps, overrides, record_poses, record_video, perturb,
-                 extra_cards, library, performance, positions, patches, recovery, live)
+                 extra_cards, library, performance, positions, patches, recovery, live, feasibility)
     program = program or task.get("program")
     extra = None
     if program:

@@ -467,6 +467,31 @@ round started by the search (see status).
      vs last commit, 30/30 identical (success, sim time, labels). Smoke 24/24 (new drawer check).
    - Not built yet: importer for user MJCF/URDF models (doors etc. come from the templates for now); closing
      motions (the goal form supports op "<=").
+8h. **Feasibility check + oracle for motions (2026-11-01)**:
+   - Oracle: `reference_motions()` in oracle.py = hand-written push + one opening motion per ARTICULATED template
+     (slide -> straight pull, hinge -> arc; the rule stand-ins at default parameters, never tuned or discovered);
+     ground-truth perception now has true parts (`_truth_parts`: front centre/normal/width, handle tip = middle of
+     the post, matching what depth reports). Oracle runs act on feasibility. Oracle before: push/open scenes always
+     "unsolvable"; now drawer 16/16, door 14/16, plate 14/16, so their failures count as valid and can be repaired.
+     Bug found on the way: stand_in("slide") picked the arc ("slide" contains "lid").
+   - `kintsugi/feasibility.py` `assess(task, percepts, cards)`: per goal, from perception only: grasp (cards whose
+     preconditions fit) / motion (no grasp fits but a verified push card covers "on" a tray/zone, or a joint goal has
+     its open_<template> card) / fallback (no grasp fits, nothing else: default grasp is still tried, so the seed
+     demo's bowl still fails with top_grasp) / missing / unseen / unreachable, each with a reason (e.g. "15.6 cm
+     across at its narrowest, the gripper opens 8 cm"). Every record carries `feasibility`. `Episode(feasibility=
+     True)` (run_episode / run_batch / trial_cfg `feasibility`; on in the Studio and prompt_task.py, off in
+     experiments like recovery): the fixed plan runs motion subtasks (`Episode.run_motion`), reports missing
+     capabilities up front (label missing_capability + `missing_call`, so the Studio creates the skill from a fixed
+     plan too), and program pick() skips a grasp when the verdict is motion. Studio goal rows show the verdict
+     (skill name, or "no grasp fits" / "skill missing" with the reason on hover).
+   - Precondition fix found by it: axis_centre_across v1 required only width/height, so plates (round) were routed to
+     the bar grasp and collided. The explorer now also derives elongation bounds (`elongation_bounds`: found only on
+     long objects -> min_elongation = 0.8 x smallest; only on round -> max 1.25 x largest); card v2 adds
+     min_elongation 1.73 (bars perceive 2.16-9.39, plates ~1.0; history/axis_centre_across_v1.json, lineage
+     "precondition audit"); dev bars 32/32 before and after.
+   - Results: slide_plate fixed plan 0/16 -> 16/16 with feasibility; pick-else-push program 8/8 both ways, 25% less
+     robot time (no doomed grasp); sort_with_bowl / stack_by_size / balls_in_basket 16/16 both ways; standard tasks
+     new code vs last commit (feasibility off) 36/36 identical. Smoke 25/25.
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked

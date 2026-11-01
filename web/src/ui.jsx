@@ -151,7 +151,10 @@ export function ScrollRow({ className = "", children }) {
   const [edge, setEdge] = useState({ left: false, right: false });
   const update = () => {
     const el = ref.current;
-    if (el) setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    if (!el) return;
+    const left = el.scrollLeft > 4, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    // same object back when nothing changed, so the effect after each render does not re-render forever
+    setEdge(e => (e.left === left && e.right === right ? e : { left, right }));
   };
   useEffect(() => {
     update();

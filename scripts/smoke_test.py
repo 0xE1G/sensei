@@ -160,6 +160,18 @@ def main():
                          "handle" in dparts and rec_open["success"],
                          f"{rec_open['subtasks'][0].get('label')} {rec_open.get('program_error')}"))
 
+    # Feasibility before running: a plate fits no grasp (push covers it), a drawer needs an opening skill the base
+    # library lacks; the oracle judges a drawer scene with its hand-written reference motions and true parts.
+    from kintsugi.feasibility import assess
+    psc = build_scene(make_task("slide_plate", seed=0), seed=0)
+    pper = Perception(psc, "sim")
+    pv = assess(make_task("slide_plate", seed=0), pper.perceive(), {**seed_library(), pcard["name"]: pcard})
+    pper.close()
+    dv = assess(dtask, Perception(dscene, "sim").perceive(), seed_library())
+    od = run_oracle(dtask, seed=0)
+    results.append(check("feasibility + oracle for motions", pv[0]["verdict"] == "motion" and dv[0]["verdict"] == "missing"
+                         and od["success"], f"plate {pv[0]['verdict']}, drawer {dv[0]['verdict']}, oracle {od['success']}"))
+
     # Investigator on the rule backend: a tall cylinder fails with top_grasp; the shallow-grasp cause is confirmed.
     spec = probe(7, {"template": "cylinder", "params": {"radius": 0.025, "height": 0.14}, "pos": [0.5, 0.1], "yaw": 0.0})
     inv = Investigator(workers=1, library=seed_library(), performance={}, client=client, run_id="smoke/investigate")

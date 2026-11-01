@@ -44,7 +44,24 @@ def plan_spec(prompt: str, backend: str | None = None) -> dict:
         task = to_task(res.output, {"prompt": prompt})
         out["task"] = task
         out["preview"] = preview(task)
+        out["feasibility"] = feasibility_preview(task)
     return out
+
+
+def feasibility_preview(task: dict) -> list | None:
+    """Per-goal feasibility with the current library, perceived on the first layout that fits (no physics)."""
+    from .feasibility import assess
+    from .perception.perceive import Perception
+    from .sim.scene import build_scene
+    from .skills.library import load_cards
+    seeds, _ = valid_seeds(task, 1, max_tries=20)
+    if not seeds:
+        return None
+    per = Perception(build_scene(task, seed=seeds[0]), "sim")
+    try:
+        return assess(task, per.perceive(), load_cards())
+    finally:
+        per.close()
 
 
 def plan_program(prompt: str, task: dict, backend: str | None = None) -> dict:
@@ -148,7 +165,7 @@ def _batch(job, task, seeds, run_id, phase, emit):
     emit("stage", stage=phase, state="start", run_id=run_id, n=len(seeds), seeds=seeds)
     s = run_batch(task["name"], workers=job["workers"], task_spec=task, seeds=seeds, run_id=run_id,
                   save_video=False, save_poses=True, save_failures=True, success_sample=1, progress=False,
-                  recovery=job["recovery"], perturb=HARD_PHYSICS if job.get("hard") else None,
+                  recovery=job["recovery"], perturb=HARD_PHYSICS if job.get("hard") else None, feasibility=True,
                   on_result=lambda r: emit("trial", phase=phase, seed=r["seed"], success=r["success"],
                                            labels=r["labels"]))
     emit("stage", stage=phase, state="end", run_id=run_id, success=s["success"], trials=s["trials"],
