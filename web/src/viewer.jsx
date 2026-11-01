@@ -41,6 +41,48 @@ function geomGeometry(g, meshes) {
   }
 }
 
+// Display only: the simulation's table is an endless plane at z = 0. The viewer draws a workbench instead, its top
+// surface exactly at z = 0, so every object and the robot base rest where the physics has them. Nothing here
+// reaches the simulation, its cameras or perception.
+const BENCH = { x: [-0.38, 0.98], y: [-0.78, 0.78], top: 0.045, height: 0.76, leg: 0.05, inset: 0.07 };
+function Workbench() {
+  const { x, y, top, height, leg, inset } = BENCH;
+  const cx = (x[0] + x[1]) / 2, cy = (y[0] + y[1]) / 2, w = x[1] - x[0], d = y[1] - y[0];
+  const mats = useMemo(() => ({
+    top: new THREE.MeshStandardMaterial({ color: "#d9d5ce", roughness: 0.85, metalness: 0.0 }),
+    edge: new THREE.MeshStandardMaterial({ color: "#5b5650", roughness: 0.6, metalness: 0.1 }),
+    steel: new THREE.MeshStandardMaterial({ color: "#3b3f45", roughness: 0.45, metalness: 0.6 }),
+    shelf: new THREE.MeshStandardMaterial({ color: "#8f8a83", roughness: 0.8 }),
+    floor: new THREE.MeshStandardMaterial({ color: "#2a2c30", roughness: 1.0 }),
+  }), []);
+  const legH = height - top;
+  const legs = [[x[0] + inset, y[0] + inset], [x[0] + inset, y[1] - inset], [x[1] - inset, y[0] + inset], [x[1] - inset, y[1] - inset]];
+  return (
+    <group>
+      {/* worktop: upper face at z = 0 */}
+      <mesh position={[cx, cy, -top / 2]} material={mats.top} receiveShadow>
+        <boxGeometry args={[w, d, top]} />
+      </mesh>
+      {/* edge band under the worktop */}
+      <mesh position={[cx, cy, -top - 0.03]} material={mats.edge} castShadow>
+        <boxGeometry args={[w - 0.04, d - 0.04, 0.06]} />
+      </mesh>
+      {legs.map(([lx, ly], i) => (
+        <mesh key={i} position={[lx, ly, -top - legH / 2]} material={mats.steel} castShadow>
+          <boxGeometry args={[leg, leg, legH]} />
+        </mesh>
+      ))}
+      {/* lower shelf */}
+      <mesh position={[cx, cy, -height + 0.16]} material={mats.shelf} castShadow receiveShadow>
+        <boxGeometry args={[w - 2 * inset, d - 2 * inset, 0.02]} />
+      </mesh>
+      <mesh position={[0.3, 0, -height - 0.001]} material={mats.floor} receiveShadow>
+        <planeGeometry args={[8, 8]} />
+      </mesh>
+    </group>
+  );
+}
+
 // scene: static geoms per body (recorder.export_geoms); pose: one frame {p: body positions, q: body quaternions}.
 function SceneObjects({ scene, meshes, pose }) {
   const groups = useRef([]);
@@ -49,9 +91,10 @@ function SceneObjects({ scene, meshes, pose }) {
       scene.geoms
         .filter((g) => g.body === body)
         .map((g, i) => {
+          if (g.type === "plane") return null;          // the table plane: drawn as the workbench instead
           const geo = geomGeometry(g, meshes);
           if (!geo) return null;
-          const plane = g.type === "plane";
+          const plane = false;
           const mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(g.rgba[0], g.rgba[1], g.rgba[2]),
             transparent: g.rgba[3] < 1, opacity: g.rgba[3], roughness: plane ? 0.95 : 0.55, metalness: 0.05,
@@ -194,6 +237,7 @@ export function Viewer({ scene, meshes, pose, height = 520, zoom = true, cameras
         <ambientLight intensity={0.55} />
         <directionalLight position={[1.2, -0.8, 2.2]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
         <directionalLight position={[-1, 1, 1.5]} intensity={0.35} />
+        {scene && <Workbench />}
         {scene && meshes && <SceneObjects scene={scene} meshes={meshes} pose={pose} />}
         <OrbitControls target={[0.4, 0, 0.2]} enableZoom={zoom} makeDefault />
         <RobotCameras scene={scene} pose={pose} show={showCams && !!scene} />
