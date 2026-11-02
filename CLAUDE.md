@@ -573,6 +573,24 @@ round started by the search (see status).
    narrow or thin objects), scissors and mouse (weak grasp/slip), tape roll; partial: dog bowl 1/8 (slip), android 2/8,
    bowl_cereal 4/8, mug_ace 4/8. Perception centre error 1-6 mm (crayon box 13 mm). These are the next repair targets
    (`auto_repair.py` on the benchmark runs); none has been repaired yet. Smoke check added (skipped without the download).
+8l. **Repair round on scanned objects (2026-11-02)**: frozen split `experiments/splits.json` "scanned_objects": 20
+   repair objects, 10 test objects (never used by any repair; measured before and once after, test-split seeds).
+   `scanned_benchmark.py --split repair|test` now runs probe scenes (scenario {template}) so auto_repair can use them;
+   `scripts/auto_repair.py` accepts nested benchmark runs and `--min-fail-rate`. Generic changes: imported objects
+   cluster by (shape group, grasp skill) (`_cluster_kind`), the explorer region becomes the group's objects
+   (`{"templates": [...]}`, failing ones first + same-group objects seen succeeding, item id "item"); held-out = whole
+   objects interleaved (train seeds 1st/3rd/.. object, dev 2nd/4th/..). Explorer: a new card whose family name exists
+   with other preconditions is added BESIDE it (`<family>_<group>`) instead of a new version (first try replaced the
+   bar grasp: bars 8/8 -> 5/8, regression gate blocked it); grasp exploration is skipped only if >= 80% of failures are
+   after the grasp (was > 50%; a mixed bowls/plates cluster skipped the grasp search).
+   Results (runs/20261102-025845_auto_repair, 20261102-031901_auto_repair): honey dipper (solid-narrow-tall) -> patch
+   top_grasp.depth_frac 0.2 (investigator), fix 17/17 vs 0/17, held-out 47/48 = before (pill bottle, Mario held);
+   lotion bottle -> new card `axis_centre_across_solid_wide_tall` v1, fix 24/24, held-out 15/16 vs 0/16 (single object:
+   held-out = placements/physics only), regression pass incl. bars. Rejected by the gates: bowls+plates+tape roll
+   (rim_pinch, 24 failures): candidates fix the failing scenes (up to 11/11) but held-out objects 7/16 vs 6/16; other
+   clusters below 8 valid failures (crayon box, mouse, mug_ace...). Repair set 89 -> 105/160 (expert 148); test set
+   39/80 -> 39/80 (expert 68): no test object falls in the two repaired groups' preconditions; nothing regressed.
+   Standard tasks identical to baseline, smoke 30/30.
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked

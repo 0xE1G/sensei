@@ -40,6 +40,27 @@
    ]
   }
  },
+ "axis_centre_across_solid_wide_tall": {
+  "solid-wide-tall": {
+   "sources": [
+    "20261102-031901_auto_repair/explore_group-solid-wide-tall_top_grasp"
+   ],
+   "success": 32,
+   "trials": 32,
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "templates": [
+        "lotion_bottle"
+       ]
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  }
+ },
  "centre_grasp": {
   "solid-narrow-tall": {
    "sources": [
@@ -250,6 +271,13 @@
     "20261031-003922_explore_probe_bar"
    ],
    "success": 13,
+   "trials": 24
+  },
+  "solid-wide-tall": {
+   "sources": [
+    "20261102-031901_auto_repair/explore_group-solid-wide-tall_top_grasp"
+   ],
+   "success": 0,
    "trials": 24
   }
  }

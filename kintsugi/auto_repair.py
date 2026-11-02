@@ -1,7 +1,7 @@
 """Auto-repair: failures from ordinary task runs trigger investigation and repair, without anyone choosing what.
 
     1. collect failed steps from trial records (any runs: named tasks, typed-request specs, probe scenes)
-    2. cluster them by (object type, grasp skill) per task source
+    2. cluster them by (object type, grasp skill) per task source; imported objects by (shape group, skill)
     3. replay each failure exactly with the oracle: only failures the oracle can solve count
     4. for every cluster with >= min_failures valid failures:
          investigator on up to max_cases of them -> confirmed one-change fixes (hints)
@@ -18,7 +18,8 @@ import time
 
 from .runner import ROOT, TrialPool, trial_cfg
 from .skills.library import load_cards
-from .sim.templates import RANGES
+from .sim.templates import ASSET_TEMPLATES, RANGES
+from .skills.router import shape_group
 from .tasks.specs import TASKS
 
 
@@ -40,9 +41,41 @@ def collect_failures(run_dirs, tag=None) -> list[dict]:
             for st in rec["subtasks"]:
                 if st.get("label") and st.get("trace") and not st.get("ok"):
                     out.append({"spec": spec, "seed": rec["seed"], "obj": st["obj"], "kind": kinds.get(st["obj"]),
+                                "group": _group(st),
                                 "skill": st["trace"][0]["skill"], "label": st["label"], "source": str(p),
                                 "perturb": rec.get("perturb")})
                     break                                     # the first failed step of the episode
+    return out
+
+
+def _group(st) -> str | None:
+    """The item's shape group as the router saw it (perception before the step)."""
+    g = (st.get("routing") or {}).get("group")
+    if g:
+        return g
+    d = (st.get("observed") or {}).get("before")
+    return shape_group(d) if d and "width" in d and "height" in d else None
+
+
+def _cluster_kind(f) -> str:
+    """Imported objects (no shape parameters) cluster by shape group, so one repair covers similar objects and its
+    held-out gate can use other objects; built-in templates keep clustering by template."""
+    if f["kind"] in ASSET_TEMPLATES and f.get("group") and _source_key(f) == "probe":
+        return f"group:{f['group']}"
+    return f["kind"]
+
+
+def peer_templates(run_dirs) -> dict:
+    """shape group -> imported templates seen in it (succeeding or failing) in the input runs."""
+    out = collections.defaultdict(set)
+    for d in run_dirs:
+        for p in sorted(pathlib.Path(d).glob("trials/*.json")):
+            rec = json.loads(p.read_text())
+            kinds = {o["id"]: o["template"] for o in (rec.get("task_spec") or {}).get("objects", [])}
+            for st in rec.get("subtasks", []):
+                t, g = kinds.get(st.get("obj")), _group(st)
+                if t in ASSET_TEMPLATES and g:
+                    out[g].add(t)
     return out
 
 
@@ -53,9 +86,16 @@ def _source_key(f):
     return s["name"] if s["name"] in TASKS else f"spec:{s['name']}"
 
 
-def repair_target(cluster):
-    """(task, task_kwargs) for the explorer."""
+def repair_target(cluster, peers=None):
+    """(task, task_kwargs) for the explorer. peers: shape group -> imported templates (peer_templates)."""
     f0 = cluster[0]
+    kind = _cluster_kind(f0)
+    if kind.startswith("group:"):
+        # every imported object of that shape group in the input runs, failing ones first so train and held-out
+        # both contain failures
+        failing = sorted({f["kind"] for f in cluster})
+        others = sorted(set((peers or {}).get(kind[6:], ())) - set(failing))
+        return "probe", {"region": {"templates": failing + others}}
     if _source_key(f0) == "probe":
         t = f0["kind"]
         region = {"template": t, "params": {}}
@@ -99,7 +139,7 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
             valid.append(f)
     groups = collections.defaultdict(list)
     for f in valid:
-        groups[(_source_key(f), f["kind"], f["skill"], json.dumps(f["perturb"], sort_keys=True))].append(f)
+        groups[(_source_key(f), _cluster_kind(f), f["skill"], json.dumps(f["perturb"], sort_keys=True))].append(f)
     _log(f"{len(valid)} valid (oracle-solvable) failures; clusters: "
          f"{ {f'{k[0]} {k[1]}/{k[2]}': len(v) for k, v in groups.items()} }")
 
@@ -135,18 +175,18 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
             (out / "report.json").write_text(json.dumps(report, indent=1, default=float))
             continue
         # Investigate: confirmed one-change fixes become hints for the explorer.
-        inv = Investigator(workers, client=client, run_id=f"{run_id}/investigate_{kind}_{skill}")
+        inv = Investigator(workers, client=client, run_id=f"{run_id}/investigate_{kind.replace(':', '-')}_{skill}")
         ir = inv.run([{"task_spec": f["spec"], "seed": f["seed"], "perturb": f["perturb"],
                        "source": {"cluster": f"{kind}/{skill}"}} for f in cl[:max_cases]])
         hints = [h["test"] for c in ir["cases"] for h in c.get("hypotheses", []) if h.get("verdict") == "confirmed"]
         entry["investigation"] = {"run_id": ir["run_id"], **{k: ir["metrics"][k] for k in
                                   ("diagnosed", "top1_label_accuracy", "confirmed", "rejected")}}
-        task, kw = repair_target(cl)
+        task, kw = repair_target(cl, peer_templates(run_dirs))
         entry["repair_target"] = {"task": task, "kwargs": {k: v for k, v in kw.items() if k != "task_spec"}}
         _log(f"cluster {kind}/{skill} ({len(cl)} failures, {entry['labels']}): {len(hints)} confirmed fixes; "
              f"explorer on {task} {entry['repair_target']['kwargs']}")
         ex = Explorer(task, workers=workers, task_kwargs=kw, hints=hints, perturb=cl[0]["perturb"],
-                      run_id=f"{run_id}/explore_{kind}_{skill}", **(explorer_kwargs or {}))
+                      run_id=f"{run_id}/explore_{kind.replace(':', '-')}_{skill}", **(explorer_kwargs or {}))
         if dry_run:
             ex.promote = lambda card, *a: ex.report.update(promoted={"card": card, "dry_run": True})
             ex.promote_routing = lambda name, *a: ex.report.update(routed={"card": name, "dry_run": True})

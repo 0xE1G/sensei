@@ -117,7 +117,10 @@ def _summary(d: pathlib.Path) -> dict:
             if item["kind"] == "failure_search":
                 item["task"] = f"{r.get('library')} library" + (" · with a bottle nearby" if r.get("obstacle") else "")
             elif item["kind"] == "explore" and (r.get("task_kwargs") or {}).get("region"):
-                item["task"] = f"{r['task_kwargs']['region']['template']}s (probe region)"
+                rg = r["task_kwargs"]["region"]
+                item["task"] = (", ".join(t.replace("_", " ") for t in rg["templates"][:3])
+                                + (f" +{len(rg['templates']) - 3}" if len(rg["templates"]) > 3 else "")
+                                if rg.get("templates") else f"{rg['template']}s (probe region)")
     except Exception:
         pass
     item["title"] = run_title(rel, item["kind"], item.get("task") if item["kind"] in ("task", "failure_search", "explore") else None)

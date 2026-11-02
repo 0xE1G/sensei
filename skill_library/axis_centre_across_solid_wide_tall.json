@@ -1,0 +1,152 @@
+{
+  "name": "axis_centre_across_solid_wide_tall",
+  "version": 1,
+  "kind": "grasp",
+  "impl": "axis_pinch",
+  "description": "axis_centre grasp, fingers closing acrossly; found by exploration after top_grasp failed on item (collision).",
+  "requires": {
+    "hollow": false,
+    "min_width": 0.074,
+    "max_width": 0.099,
+    "min_height": 0.213,
+    "max_height": 0.233
+  },
+  "params": {
+    "along": {
+      "default": -0.0109,
+      "range": [
+        -0.8,
+        0.8
+      ],
+      "unit": "fraction of the half long extent"
+    },
+    "across": {
+      "default": -0.1197,
+      "range": [
+        -0.8,
+        0.8
+      ],
+      "unit": "fraction of the half short extent"
+    },
+    "depth": {
+      "default": 0.0131,
+      "range": [
+        0.004,
+        0.06
+      ],
+      "unit": "m below the top"
+    },
+    "close_deg": {
+      "default": 7.2196,
+      "range": [
+        -90,
+        90
+      ],
+      "unit": "closing direction vs the short axis (0 = across the long axis)"
+    },
+    "tilt_deg": {
+      "default": -10.3352,
+      "range": [
+        -30,
+        30
+      ]
+    },
+    "approach_height": {
+      "default": 0.08,
+      "range": [
+        0.04,
+        0.15
+      ]
+    },
+    "descend_speed": {
+      "default": 0.1,
+      "range": [
+        0.04,
+        0.3
+      ]
+    },
+    "grip_force": {
+      "default": 31.1474,
+      "range": [
+        5,
+        40
+      ]
+    }
+  },
+  "check": "fingers closed on the object: 3 mm < finger width < 76 mm",
+  "lineage": [
+    {
+      "version": 1,
+      "source": "exploration",
+      "run_id": "20261102-031901_auto_repair/explore_group-solid-wide-tall_top_grasp",
+      "date": "2026-11-02",
+      "parent": {
+        "primitive": "axis_pinch",
+        "version": 1
+      },
+      "trigger": {
+        "skill": "top_grasp",
+        "skill_version": 1,
+        "label": "collision",
+        "labels": {
+          "collision": 24
+        },
+        "obj": "item",
+        "task": "probe",
+        "task_kwargs": {
+          "region": {
+            "templates": [
+              "lotion_bottle"
+            ]
+          }
+        }
+      },
+      "family": "axis_centre_across",
+      "trials_simulated": 1632,
+      "tune_best_train_rate": 1.0,
+      "results": {
+        "cluster": [
+          0,
+          24,
+          24
+        ],
+        "held_out": {
+          "before": 0.0,
+          "after": 0.938,
+          "ci95": [
+            0.717,
+            0.989
+          ],
+          "trials": 16
+        }
+      },
+      "diff": {
+        "along": [
+          0.0,
+          -0.0109
+        ],
+        "across": [
+          0.0,
+          -0.1197
+        ],
+        "depth": [
+          0.015,
+          0.0131
+        ],
+        "close_deg": [
+          0,
+          7.2196
+        ],
+        "tilt_deg": [
+          0,
+          -10.3352
+        ],
+        "grip_force": [
+          30,
+          31.1474
+        ]
+      },
+      "requires_diff": null
+    }
+  ]
+}

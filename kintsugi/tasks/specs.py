@@ -100,7 +100,8 @@ PROBE_TEMPLATES = ("block", "ball", "cylinder", "bowl", "cup", "bar", "mug")
 
 
 def region_scenario(seed: int, region: dict) -> dict:
-    """An object drawn from a failure-search cluster's region: {"template": t, "params": {k: [lo, hi]}}.
+    """An object drawn from a failure-search cluster's region: {"template": t, "params": {k: [lo, hi]}}, or for
+    imported objects {"templates": [t1, t2, ...]} (whole objects as the held-out unit).
 
     Held-out objects come from interleaved bands: the region's first shape parameter is cut into five bands; train
     seeds draw from bands 1, 3 and 5, dev and test seeds from bands 2 and 4. Gate objects are never tuned on, and lie
@@ -109,6 +110,14 @@ def region_scenario(seed: int, region: dict) -> dict:
     """
     from ..sim.templates import RANGES
     rng = np.random.default_rng(seed)
+    if region.get("templates"):
+        # Imported objects have no shape parameters: held-out objects are whole objects, interleaved the same way
+        # (train seeds draw from the 1st, 3rd, ... object, dev/test seeds from the 2nd, 4th, ...). One object only:
+        # held-out differs by placement and physics, not shape.
+        ts = list(region["templates"])
+        pick = ts[0::2] if which_split(seed) == "train" or len(ts) < 2 else ts[1::2]
+        # one item id for every object, so a repair can address "the item" whichever object a seed draws
+        return {"template": str(pick[rng.integers(len(pick))]), "params": dict(region.get("params") or {}), "id": "item"}
     t = region["template"]
     bounds = {k: list(region.get("params", {}).get(k, RANGES[t][k])) for k in RANGES[t]}
     key = next(k for k in RANGES[t] if k not in ("mass", "friction"))
@@ -139,21 +148,22 @@ def probe(seed=0, scenario=None, region=None) -> dict:
         t = PROBE_TEMPLATES[rng.integers(len(PROBE_TEMPLATES))]
         scenario = {"template": t, "params": {k: float(rng.uniform(lo, hi)) for k, (lo, hi) in RANGES[t].items()}}
     t = scenario["template"]
+    oid = scenario.get("id", t)
     if t == "ball":
         target = {"id": "bin", "template": "bin", "role": "target",
                   "params": {"width": 0.22, "depth": 0.18, "wall_height": 0.06, "color": "brown"}}
-        goal = {"pred": "inside", "obj": t, "target": "bin"}
+        goal = {"pred": "inside", "obj": oid, "target": "bin"}
     else:
         target = {"id": "tray", "template": "tray", "role": "target",
                   "params": {"width": 0.26, "depth": 0.22, "color": "gray"}}
-        goal = {"pred": "on", "obj": t, "target": "tray", "upright": t in ("bowl", "cup", "cylinder", "mug")}
+        goal = {"pred": "on", "obj": oid, "target": "tray", "upright": t in ("bowl", "cup", "cylinder", "mug")}
     task = {"name": "probe", "prompt": f"Put the {t} on the {target['id']}.", "scenario": scenario,
             "split": which_split(seed),
-            "objects": [target, {"id": t, "template": t, "role": "item",
+            "objects": [target, {"id": oid, "template": t, "role": "item",
                                  "params": {**scenario["params"], "color": "orange"}}],
             "goal": [goal], "constraints": []}
     if scenario.get("pos"):
-        task["layout_fixed"] = {t: (float(scenario["pos"][0]), float(scenario["pos"][1]),
+        task["layout_fixed"] = {oid: (float(scenario["pos"][0]), float(scenario["pos"][1]),
                                     float(scenario.get("yaw", 0.0)))}
     ob = scenario.get("obstacle")
     if ob and scenario.get("pos"):

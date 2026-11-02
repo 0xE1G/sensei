@@ -166,6 +166,40 @@
     }
    ]
   },
+  "solid-narrow-tall": {
+   "date": "2026-11-02",
+   "diff": {
+    "depth_frac": [
+     0.5,
+     0.2
+    ]
+   },
+   "evidence": {
+    "success": 17,
+    "trials": 17
+   },
+   "params": {
+    "depth_frac": 0.2
+   },
+   "source": "investigator",
+   "sources": [
+    "20261102-025845_auto_repair/explore_group-solid-narrow-tall_top_grasp"
+   ],
+   "triggers": [
+    {
+     "kwargs": {
+      "region": {
+       "templates": [
+        "honey_dipper",
+        "mario_figure",
+        "pill_bottle"
+       ]
+      }
+     },
+     "task": "probe"
+    }
+   ]
+  },
   "solid-wide-short": {
    "date": "2026-10-31",
    "diff": {

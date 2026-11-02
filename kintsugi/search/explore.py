@@ -53,6 +53,14 @@ MIN_CLUSTER = 10        # failed cases the paired gate needs
 N_DEV_PATCH = 48        # held-out objects for patch gates (patch targets fail less often than missing skills)
 
 
+
+def _region_name(region: dict) -> str:
+    """A region's short name for run ids and labels: its template, or its first objects for an object list."""
+    if region.get("templates"):
+        ts = region["templates"]
+        return "+".join(ts[:2]) + (f"+{len(ts) - 2}" if len(ts) > 2 else "")
+    return region["template"]
+
 def _log(msg):
     print(f"[explore] {msg}", flush=True)
 
@@ -131,7 +139,7 @@ class Explorer:
         self.tune_trials, self.tune_seeds, self.n_dev, self.n_regression = tune_trials, tune_seeds, n_dev, n_regression
         self.min_feasible, self.force = min_feasible, force
         self.rng = np.random.default_rng(seed)
-        suffix = f"_{self.task_kwargs['region']['template']}" if "region" in self.task_kwargs else ""
+        suffix = f"_{_region_name(self.task_kwargs['region'])}" if "region" in self.task_kwargs else ""
         self.run_id = run_id or time.strftime(f"%Y%m%d-%H%M%S_explore_{task}{suffix}")
         self.out = ROOT / "runs" / self.run_id
         self.out.mkdir(parents=True, exist_ok=True)
@@ -478,6 +486,14 @@ class Explorer:
         requires.update(min_width=round(max(0.0, min(ws) - 0.01), 3), max_width=round(max(ws) + 0.01, 3),
                         min_height=round(max(0.0, min(hs) - 0.01), 3), max_height=round(max(hs) + 0.01, 3))
         requires.update(elongation_bounds([d.get("elongation", 1.0) for d in self._cluster_descs]))
+        if old and old.get("requires") != requires:
+            # Same family, other shapes: add a card beside the old one instead of a new version that would replace
+            # it on the shapes it was verified on (the router picks between them by preconditions and evidence).
+            name = f"{name}_{self._cluster_groups()[0].replace('-', '_')}"
+            old = L.load_cards().get(name)
+            if old and old.get("requires") != requires:
+                old = None
+                name = f"{name}_{time.strftime('%m%d%H%M')}"
         return {
             "name": name, "version": (old["version"] + 1) if old else 1, "kind": "grasp", "impl": prim["name"],
             "description": (f"{family['anchor']} grasp, fingers closing "
@@ -543,7 +559,7 @@ class Explorer:
         b = {"tasks": {}, "pass": True}
         for it in self._regression_items():
             t, kw = it["task"], it["kwargs"]
-            label = t + (f"[{kw['region']['template']}]" if "region" in kw else "")
+            label = t + (f"[{_region_name(kw['region'])}]" if "region" in kw else "")
             seeds = list(range(self.n_regression))
             base = self._baseline(t, seeds, kw)
             # Regression always at nominal physics (perturb={}), whatever conditions the repair targets.
@@ -749,7 +765,9 @@ class Explorer:
                     self.promote_routing(row["card"], cluster, g, perf)
                     self.report["outcome"] = "routed"
                     return self.report
-            post_grasp = sum(c for l, c in cluster["labels"].items() if l in POST_GRASP) > 0.5 * sum(
+            # Grasp exploration is skipped only when nearly all failures come after the grasp: a cluster that mixes
+            # slips with missed grasps (different objects of one shape group) still needs a better grasp.
+            post_grasp = sum(c for l, c in cluster["labels"].items() if l in POST_GRASP) >= 0.8 * sum(
                 cluster["labels"].values())
             if post_grasp or self.hints:
                 chosen, groups = self.patch_search(cluster)

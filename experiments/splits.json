@@ -15,5 +15,14 @@
     "dev":   {"radius": [[0.034, 0.038], [0.046, 0.050]], "height": [[0.07, 0.08], [0.10, 0.12]], "wall": [[0.004, 0.005], [0.007, 0.009]],
               "friction": [[0.6, 0.7], [1.2, 1.3]], "mass": [[0.04, 0.06], [0.15, 0.25]]},
     "test":  {"radius": [[0.030, 0.034]], "height": [[0.07, 0.12]], "wall": [[0.004, 0.009]], "friction": [[0.6, 1.3]], "mass": [[0.04, 0.25]]}
+  },
+  "scanned_objects": {
+    "frozen": "2026-11-02",
+    "note": "Whole objects, not parameter bands (imported meshes have no shape parameters). repair: the repair loop may use these (its held-out gate objects are drawn from them, interleaved). test: never used by any repair or tuning; measured before the repair round and once after it, on test-split seeds. Chosen so every failure kind in the first benchmark has members on both sides.",
+    "repair": ["mug_ace", "mug_blue", "mug_beaded", "ramekin", "ramekin_glazed", "bowl_turquoise", "bowl_black",
+               "bowl_footed", "dog_bowl", "plant_cup", "salad_plate", "soap_dish", "mario_figure", "crayon_box",
+               "lotion_bottle", "pill_bottle", "honey_dipper", "screwdriver", "computer_mouse", "tape_roll"],
+    "test": ["mug_yellow", "ramekin_large", "bowl_cereal", "plant_pot", "saucer", "android_figure", "gum_box",
+             "supplement_jar", "scissors", "coffee_jar"]
   }
 }

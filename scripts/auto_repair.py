@@ -26,8 +26,13 @@ def main():
     ap.add_argument("--workers", type=int, default=default_workers())
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--tag", default=None, help="only trial records whose tag contains this (e.g. probe_off)")
+    ap.add_argument("--min-fail-rate", type=float, default=None,
+                    help="skip clusters whose failure rate is surely below this (as the Studio does with 0.10)")
     a = ap.parse_args()
-    rep = auto_repair(a.runs, a.workers, ModelClient(a.backend), a.min_failures, a.max_cases, a.dry_run, tag=a.tag)
+    runs = [str(d) for r in a.runs for d in ([pathlib.Path(r)] + sorted(pathlib.Path(r).glob("*/")))
+            if any(pathlib.Path(d).glob("trials/*.json"))]          # a benchmark run nests one run per object
+    rep = auto_repair(runs, a.workers, ModelClient(a.backend), a.min_failures, a.max_cases, a.dry_run, tag=a.tag,
+                      explorer_kwargs={"min_fail_rate": a.min_fail_rate} if a.min_fail_rate else None)
     print(json.dumps(rep["clusters"], indent=1, default=str))
     print(f"report: runs/{rep['run_id']}/report.json")
 
