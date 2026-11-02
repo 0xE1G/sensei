@@ -22,7 +22,6 @@ import time
 
 import numpy as np
 
-from .agents.llm import ModelRejected
 from .runner import ROOT, TrialPool, trial_cfg, wilson
 from .search.explore import ALPHA, REGRESSION_TASKS, TUNE_PERTURB, mcnemar_p
 from .skills.library import LIB_DIR, save_card, rel
@@ -78,9 +77,12 @@ def _log(msg):
 class SkillCreator:
     def __init__(self, capability, task_name=None, workers=None, client=None, n_candidates=40, search_seeds=3,
                  tune_trials=16, tune_seeds=4, n_dev=16, run_id=None, seed=0, n_strategies=3,
-                 task_spec=None, program=None, obj=None, target=None, description=None):
+                 task_spec=None, program=None, obj=None, target=None, description=None, library=None):
         """task_spec + program + obj/target: a typed request whose plan called use(capability, obj, target);
-        description: what the capability must do (default: from CAPABILITIES, else from the request)."""
+        description: what the capability must do (default: from CAPABILITIES, else from the request);
+        library: the skill library the trials run with (default: the active one; evaluations pass one without any card
+        of this kind, as if the capability had never existed)."""
+        self.library = library
         from .agents.llm import ModelClient
         self.task_spec = ({k: v for k, v in task_spec.items() if k not in ("program", "program_source")}
                           if task_spec else None)
@@ -102,6 +104,10 @@ class SkillCreator:
         goal = self._task(0)["goal"][0]
         self.obj, self.target = obj or goal["obj"], target if (obj or target) else goal.get("target")
         self.program = program or self.cap["program"].format(obj=self.obj, target=self.target)
+        import os
+        # Camera evidence in the revision after failed gates (escalation; off by default until measured useful).
+        self.vision = os.environ.get("KINTSUGI_VISION_CREATE", "0") == "1" and self.client.backend != "rule"
+        self._fb_images = []
         self.report = {"run_id": self.run_id, "capability": capability, "task": self.task_label,
                        "description": self.cap["description"], "program": self.program, "phases": {},
                        "trials_simulated": 0}
@@ -124,7 +130,7 @@ class SkillCreator:
             task, kw = task or self.task_name, {}
         return trial_cfg(task, self.out, save_failures=False, success_sample=0, save_video=False,
                          save_poses=False, tag=tag, extra_cards=extra, overrides=overrides, perturb=perturb,
-                         task_kwargs=kw)
+                         task_kwargs=kw, library=self.library)
 
     def _run_program(self, tag, card, params, seeds, perturb=None):
         """The task's own spec + the capability program, as a task_spec per seed."""
@@ -187,7 +193,8 @@ class SkillCreator:
         goal = next((g for g in self._task(0)["goal"] if g.get("obj") == self.obj), None)
         res = self.client.complete("propose_primitive", {"capability": f"{self.capability}: {self.cap['description']}",
                                                          "why": why, "obj": obj, "target": target, "goal": goal,
-                                                         "feedback": feedback, "other_strategies": others})
+                                                         "feedback": feedback, "other_strategies": others},
+                                   images=self._fb_images if feedback else None)
         out = res.output
         card = {"name": out["name"] if out["name"].startswith(self.capability) else f"{self.capability}_{out['name']}",
                 "version": 1, "kind": self.capability, "impl": "generated", "code": out["code"],
@@ -277,6 +284,49 @@ class SkillCreator:
                 + "\n".join(lines) + f"\nTuned values: { {k: v['default'] for k, v in card['params'].items()} }\n"
                 f"Your previous code:\n{card['code']}\nRevise the motion so it works reliably.")
 
+    def feedback_images(self, card) -> str:
+        """Camera evidence for the revision: one failed and one successful TRAINING scene of the tuned candidate
+        (the confirmation run after tuning; never held-out scenes, which the gate judges). Sets self._fb_images and
+        returns the text that describes them ('' if vision is off or no training scene failed)."""
+        self._fb_images = []
+        if not self.vision:
+            return ""
+        from .evidence import capture
+        cseeds = split_seeds("train", 8, start=30)
+        try:
+            recs = self._records("confirm", cseeds)
+        except OSError:
+            return ""
+        fail = next((r for r in recs if not r["success"]), None)
+        win = next((r for r in recs if r["success"]), None)
+        if fail is None:
+            return ""
+        params = ((self.report["phases"].get("tune") or {}).get("best") or {}).get("params")
+        texts = []
+        for r, what in ((fail, "a FAILED training scene"), (win, "a SUCCESSFUL training scene")):
+            if r is None:
+                continue
+            st = next((s for s in r["subtasks"] if s.get("trace")), None)
+            if st is None:
+                continue
+            step = next((t for t in st["trace"] if not t["ok"]), st["trace"][-1])
+            spec = {**self._task(r["seed"]), "program": self.program}
+            pos = {k: (v["pos"][0], v["pos"][1], v["yaw"]) for k, v in r["objects"].items()}
+            try:
+                ev = capture(spec, r["seed"], st["obj"], self.out / "evidence" / f"{card['name']}_{r['seed']}.jpg",
+                             positions=pos, perturb=r.get("perturb"), extra_cards={card["name"]: card},
+                             library=self.library,
+                             overrides={card["name"]: params} if params else None, program=self.program,
+                             step=step, title=f"{card['name']}: {what}")
+            except Exception as e:
+                _log(f"evidence for {what} failed: {type(e).__name__}: {e}")
+                continue
+            if ev:
+                self._fb_images.append(ev["image"])
+                texts.append(f"Image {len(self._fb_images)} = {what}. {ev['text']}")
+        self.report["phases"].setdefault("evidence", []).append({"card": card["name"], "images": list(self._fb_images)})
+        return ("\n\nCamera evidence (attached):\n" + "\n".join(texts)) if texts else ""
+
     def tune(self, card, rows, cands):
         import optuna
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -362,7 +412,7 @@ class SkillCreator:
                 for i in range(k):
                     try:
                         card, meta = self.propose(before, feedback, others or None)
-                    except ModelRejected as e:           # an invalid proposal is a failed strategy, not a crash
+                    except Exception as e:               # an invalid proposal (or a model error) is a failed strategy, not a crash
                         rejected.append(str(e))
                         self.report["phases"].setdefault("proposals", []).append(
                             {"attempt": attempt, "option": i, "rejected": str(e), "feedback": feedback})
@@ -401,6 +451,7 @@ class SkillCreator:
                     return self.report
                 self.report["outcome"] = "failed_gates"
                 feedback = self.gate_feedback(card, g)
+                feedback += self.feedback_images(card)
                 _log(f"gates failed; feeding back:\n{feedback}")
             return self.report
         finally:

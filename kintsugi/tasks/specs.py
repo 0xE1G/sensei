@@ -120,10 +120,11 @@ def region_scenario(seed: int, region: dict) -> dict:
         return {"template": str(pick[rng.integers(len(pick))]), "params": dict(region.get("params") or {}), "id": "item"}
     t = region["template"]
     bounds = {k: list(region.get("params", {}).get(k, RANGES[t][k])) for k in RANGES[t]}
-    key = next(k for k in RANGES[t] if k not in ("mass", "friction"))
-    lo, hi = bounds[key]
-    band = rng.choice([0, 2, 4] if which_split(seed) == "train" else [1, 3])
-    bounds[key] = [lo + band * (hi - lo) / 5, lo + (band + 1) * (hi - lo) / 5]
+    key = next((k for k in RANGES[t] if k not in ("mass", "friction")), None)
+    if key is not None:                     # an imported model has no shape parameter: no bands (placement, physics)
+        lo, hi = bounds[key]
+        band = rng.choice([0, 2, 4] if which_split(seed) == "train" else [1, 3])
+        bounds[key] = [lo + band * (hi - lo) / 5, lo + (band + 1) * (hi - lo) / 5]
     scn = {"template": t, "params": {k: float(rng.uniform(a, b)) for k, (a, b) in bounds.items()}}
     if "obstacle" in region:                 # a bottle near the item, as in the failure-search cluster
         ob = region["obstacle"]

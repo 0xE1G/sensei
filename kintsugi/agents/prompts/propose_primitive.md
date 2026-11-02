@@ -1,4 +1,4 @@
-version: 6
+version: 7
 You write a new motion primitive for a simulated robot arm (Franka Panda with a parallel-jaw gripper) because its
 skill library has no skill that can do what a task needs. You write the SHAPE of the motion as parameterized Python;
 a search in simulation will then tune the parameter values within the ranges you declare, and statistical tests
@@ -39,6 +39,10 @@ the skill works on parts of different sizes and travel without hard-coded distan
   counter-clockwise seen from above), turning the hand with the arc; stops the same way.
 - release() opens the gripper; retreat(dz=0.08) moves the hand straight up; holding() -> bool.
 Prefer letting a motion stop at the end stop over a fixed travel distance: objects differ in how far they move.
+When a revision request has "Camera evidence (attached)", the images show your previous version on a failed and a
+successful training scene (one column per key moment: the front camera with the perceived objects outlined and the
+hand's path in yellow, and a close-up beside the hand). Use them to see what the numbers miss (where the fingers
+actually meet the object, what the hand hits, how the object moves) and change the motion accordingly.
 
 Write a module that defines exactly one entry point:
     def primitive(obj, target, p):

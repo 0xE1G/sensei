@@ -98,7 +98,7 @@ export default function Investigator({ runs }) {
                               {c.hypotheses.map((h, i) => (
                                 <div key={i} className={`hyp ${h.verdict || "untested"}`}>
                                   <div className="hyp-top">
-                                    <span className="hyp-cause">{h.cause}</span>
+                                    <span className="hyp-cause">{h.round === 2 && <span className="pill" title="Proposed after looking at the camera images">second look</span>} {h.cause}</span>
                                     <Chip status={VERDICT[h.verdict] || "hypothesis"}>{h.verdict || "untested"}</Chip>
                                   </div>
                                   <div className="hyp-test">
@@ -110,6 +110,15 @@ export default function Investigator({ runs }) {
                             </div>
                           </section>
                         </div>
+                        {c.camera && (
+                          <section className="card">
+                            <header className="card-head"><h3>Camera evidence</h3><span className="sub">second look, only because every first hypothesis was rejected</span></header>
+                            <a href={`/api/image?path=${encodeURIComponent(c.camera.image)}`} target="_blank" rel="noreferrer">
+                              <img className="evidence-sheet" src={`/api/image?path=${encodeURIComponent(c.camera.image)}`} alt="Key moments of the failing step from the robot's cameras" />
+                            </a>
+                            <ol className="facts">{(c.camera.moments || []).map((m, i) => <li key={i}>t = {m.t} s · {m.why}</li>)}</ol>
+                          </section>
+                        )}
                         {c.summary && <p className="caption">{c.summary}</p>}
                         <Details label="Raw evidence">
                           <Code>{JSON.stringify({ derived: c.evidence?.derived, perceived: c.evidence?.perceived, observed: c.evidence?.observed,

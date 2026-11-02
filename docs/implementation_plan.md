@@ -151,7 +151,7 @@ Rules for every model job:
 | Model | Job | Notes |
 | --- | --- | --- |
 | Muse Spark | task spec, clarifying question, refusal; plan programs; failure diagnosis; grasp-family names and proposals; patch proposals; failure-search region proposals; retrieval re-ranking | stand-in: Claude via CLI |
-| SAM 3 | masks at key moments (start, before grasp, after place, failure frames); hand + object tracking for video imitation | stand-in: simulator masks; report the perception gap on ~50 SAM episodes |
+| SAM 3.1 | real images only (decision 2026-11-02): photos and videos for task-from-photo and learning from video (hand + object tracking); not in the simulation loop, where simulator masks are exact and free | perception gap on ~50 SAM episodes as a credibility number |
 | Muse Wonder (if available) | orchestration of multi-step jobs; repairing invalid specs from validator errors (count repairs) | verify access and capability when the key arrives |
 | Muse Code | coding assistant during the build | mention in the submission |
 | open-weight models | optional self-hosting if rate limits bite | only if needed |
@@ -354,8 +354,9 @@ Finish each thin path before adding breadth; keep the smoke test green and under
 | 8c | done: **Model-written primitives**, shown on push (+ push-to-edge-then-grasp program) | the system creates a skill it did not have and it passes the gates |
 | 8d | done: Recovery inside a run (observable retry decision, next verified grasp) + auto-repair orchestrator | task success with vs without recovery (hard physics 148 -> 150/160) |
 | 9 | done (v1): **Web app** over saved files | full demo replays offline |
-| 9b | **Base + user skill libraries**: the shipped library (`skill_library/`) stays read-only; every discovery (cards, versions, patches, routing evidence, composites) goes to a local git-ignored user library; the loader merges both (user overrides base); Skills tab shows base vs local; export/import of skill packs; a skill enters the base library only after re-passing the gates on the reference held-out set | a fresh clone plus a local repair shows the new skill as "local", `git status` stays clean, a `git pull` of the base never conflicts |
-| 10 | **Spark + SAM switch-over** when the key arrives; re-run reported experiments; perception gap on ~50 episodes | headline numbers produced with Meta models |
+| 9b | done: **Base + user skill libraries**: the shipped library (`skill_library/`) stays read-only; every discovery (cards, versions, patches, routing evidence, composites) goes to a local git-ignored user library; the loader merges both (user overrides base); Skills tab shows base vs local; export/import of skill packs; a skill enters the base library only after re-passing the gates on the reference held-out set | a fresh clone plus a local repair shows the new skill as "local", `git status` stays clean, a `git pull` of the base never conflicts |
+| 10 | **Spark evaluation** (updated 2026-11-02): Spark main with per-call Claude fallback (marked, never counted as Spark); reasoning-effort check; per-job suite vs Claude and rule (task spec, plan programs, skills from scratch, diagnosis, retrieval/transfer, failure search) with latency and cost; Muse Wonder tried only for writing new motion code; prompt fixes checked on both backends | every model-dependent number has a Spark value next to the Claude one |
+| 10a | **Headline harness + figures**: one command re-runs every headline (fixed seeds, repeats for error bars); a central research-style figure (the loop annotated with measured numbers) plus small charts | figure built from the frozen numbers |
 | 10b | **Unseen-object benchmark** (frozen set, one automatic search-and-repair cycle) | before/after on never-seen objects |
 | 11 | **Test split, once**; freeze numbers | results file frozen |
 | 12 | Demo video, write-up | submitted |
@@ -367,7 +368,8 @@ demo.
 
 | Rank | Improvement | Adds | Start when |
 | --- | --- | --- | --- |
-| 1 | Learn from a human video: SAM tracks hand and object, MediaPipe pinch vs wrap, contact segments reach/grasp/lift/move/release, the model maps them to a plan program, sim retries | "watches once, then does it" | core loop done |
+| 1 | Learn a task from a video (updated 2026-11-02): Muse Spark watches the clip (video input) and writes the task spec, step order and a plan program over the skill API; SAM 3.1 tracks hand and objects in one call (timestamps, which object moved when); Spark judges pinch vs wrap from the frames (replaces MediaPipe); the program is verified on fresh scenes and stored as a composite, missing motions go to skill creation. Measured first on rendered clips of the expert doing known tasks (spec / program match rate), human clips for the demo | "watches once, then does it" | core loop done; after visual evidence |
+| 1b | Task from a photo: a goal photo ("make it look like this") -> task spec with measurable goals, checked to describe that arrangement; a photo of a real table -> simulated copy from templates and scanned objects ("Build for your world") | prompt by image | after visual evidence |
 | 2 | Automatic curriculum: after a fix, generate harder variants (thinner, slipperier, tighter, more clutter) and show where the skill stops working | difficulty ladder | gates work |
 | 3 | Self-proposed tasks (RoboGen/GenSim style): the model proposes tasks from template affordances, the oracle keeps solvable ones, they grow the regression set | breadth without hand-writing tasks | model layer + oracle |
 | 4 | Composite skill mining from repeated successful sequences (now core: step 8b, program verification) | new skills from the library's own history | plan programs |

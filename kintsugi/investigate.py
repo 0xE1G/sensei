@@ -15,6 +15,7 @@ from __future__ import annotations
 import collections
 import copy
 import json
+import pathlib
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -106,7 +107,11 @@ def describe_test(t: dict) -> str:
 
 class Investigator:
     def __init__(self, workers=None, library=None, performance=None, library_name="current", client=None,
-                 run_id=None, model_threads=4):
+                 run_id=None, model_threads=4, vision=None, look_images=True):
+        """vision: a second look with camera evidence for cases whose first hypotheses were all rejected (None: the
+        KINTSUGI_VISION setting, default on since the 2026-11-02 measurement; never with the rule backend, which
+        cannot read images).
+        look_images=False is the control arm of that measurement: the same second look without the image."""
         from .agents.llm import ModelClient
         from .skills.library import load_cards
         from .skills.router import load_performance
@@ -116,6 +121,11 @@ class Investigator:
         self.patches = load_patches() if performance is None else {}
         self.library_name = library_name
         self.client = client or ModelClient()
+        if vision is None:
+            import os
+            vision = os.environ.get("KINTSUGI_VISION", "1") == "1"
+        self.vision = bool(vision) and self.client.backend != "rule"
+        self.look_images = look_images
         self.model_threads = model_threads
         self.run_id = run_id or time.strftime("%Y%m%d-%H%M%S_investigate")
         self.out = ROOT / "runs" / self.run_id
@@ -210,6 +220,11 @@ class Investigator:
             # it neither confirms nor rejects the cause.
             h["verdict"] = "confirmed" if s["ok"] else ("inconclusive" if h.get("test_clipped") else "rejected")
             h["replay"] = {"step_ok": s["ok"], "label": s.get("label"), "change": describe_test(h["test"])}
+        # 3b. a second look with camera evidence, only where every first hypothesis was rejected (escalation:
+        # cases that already have a confirmed cause are never touched, so this cannot make them worse)
+        if self.vision:
+            self._second_look([it for it in repro if it.get("hyps") is not None
+                               and not any(h.get("verdict") == "confirmed" for h in it["hyps"])])
         # 4. ledger and scores
         cases_out = [self._ledger(it) for it in items]
         report = {"run_id": self.run_id, "library": self.library_name, "backend": self.client.backend,
@@ -217,6 +232,76 @@ class Investigator:
                   "model_stats": self.client.stats, "wall_time_s": round(time.time() - self.t0, 1)}
         (self.out / "report.json").write_text(json.dumps(report, indent=1, default=float))
         return report
+
+    def _second_look(self, stuck):
+        from .evidence import capture
+        if not stuck:
+            return
+        _log(f"second look ({'with camera images' if self.look_images else 'text only, control'}) for {len(stuck)} "
+             f"unexplained case(s)")
+        calls = []
+        for it in stuck:
+            st, base, c = it["st"], it["base"], it["case"]
+            step = next((t for t in st["trace"] if not t["ok"]), st["trace"][-1])
+            positions = {k: (v["pos"][0], v["pos"][1], v["yaw"]) for k, v in base["objects"].items()}
+            try:
+                ev = capture(c["task_spec"], c["seed"], st["obj"], self.out / "evidence" / f"case{it['i']:03d}.jpg",
+                             positions=positions, perturb=c.get("perturb"), library=self.cards,
+                             performance=self.perf, patches=self.patches, step=step,
+                             title=f"{base.get('prompt') or ''} | step: {step['skill']} on {st['obj']}")
+            except Exception as e:                      # evidence is optional: the case keeps its first result
+                it["vision_error"] = f"{type(e).__name__}: {e}"
+                continue
+            if not ev:
+                continue
+            it["camera"] = ev
+            tested = [{"cause": h["cause"], "test": describe_test(h["test"]),
+                       "replay": (h.get("replay") or {}).get("label") or h.get("replay_error")} for h in it.get("hyps", [])]
+            if self.look_images:
+                calls.append((it, {**it["evidence"], "already_tested": tested, "camera": ev["text"]}, [ev["image"]]))
+            else:                                       # control: same second look, no image
+                calls.append((it, {**it["evidence"], "already_tested": tested}, []))
+
+        def ask(args):
+            it, inputs, images = args
+            from .agents.llm import ModelRejected
+            try:
+                res = self.client.complete("diagnose", inputs, images=images)
+                return {"output": res.output, "meta": res.meta}
+            except ModelRejected as e:
+                return {"rejected": e.reasons}
+            except Exception as e:
+                return {"rejected": [f"{type(e).__name__}: {e}"]}
+        with ThreadPoolExecutor(self.model_threads) as ex:
+            answers = list(ex.map(ask, calls))
+        jobs, keys = [], []
+        for (it, _, _), d in zip(calls, answers):
+            it["diagnosis2"] = d
+            if "output" not in d:
+                continue
+            seen = {describe_test(h["test"]) for h in it.get("hyps", [])}
+            hyps2 = [h for h in sorted(d["output"]["hypotheses"], key=lambda h: -h.get("confidence", 0))
+                     if describe_test(h["test"]) not in seen]
+            it["hyps2"] = hyps2
+            for j, h in enumerate(hyps2):
+                h["round"] = 2
+                tag = f"case{it['i']}_v{j}"
+                try:
+                    cfg, h["test_clipped"] = self._replay_cfg(tag, it["case"], it["base"], it["st"]["obj"], h["test"])
+                except Exception as e:
+                    h["replay_error"] = f"{type(e).__name__}: {e}"
+                    continue
+                jobs.append((cfg, it["case"]["seed"]))
+                keys.append((it, j, tag))
+        list(self.pool.map(jobs))
+        for it, j, tag in keys:
+            rec = self._record(tag, it["case"]["seed"])
+            s = next(s for s in rec["subtasks"] if s.get("obj") == it["st"]["obj"])
+            h = it["hyps2"][j]
+            h["verdict"] = "confirmed" if s["ok"] else ("inconclusive" if h.get("test_clipped") else "rejected")
+            h["replay"] = {"step_ok": s["ok"], "label": s.get("label"), "change": describe_test(h["test"])}
+        n = sum(any(h.get("verdict") == "confirmed" for h in it.get("hyps2", [])) for it in stuck)
+        _log(f"second look: a cause confirmed in {n}/{len(stuck)} case(s)")
 
     def _ledger(self, it):
         c, base, st = it["case"], it["base"], it["st"]
@@ -252,10 +337,28 @@ class Investigator:
                                "text": f"replay with {h['replay']['change']}{note}: step "
                                f"{'succeeded' if h['replay']['step_ok'] else 'still failed (' + str(h['replay']['label']) + ')'}",
                                "hypothesis": h["cause"]})
+        if it.get("camera"):
+            ledger.append({"status": "measured", "text": "second look with the robot's camera images ("
+                           + "; ".join(f"t={m['t']} s {m['why']}" for m in it["camera"]["moments"]) + ")",
+                           "image": str(pathlib.Path(it["camera"]["image"]).relative_to(ROOT / "runs").as_posix())})
+            d2 = it.get("diagnosis2", {})
+            if "rejected" in d2:
+                ledger.append({"status": "rejected", "text": f"second-look diagnosis rejected: {d2['rejected']}"})
+            for h in it.get("hyps2", []):
+                ledger.append({"status": "hypothesis", "text": h["cause"], "predicted_label": h["predicted_label"],
+                               "confidence": h.get("confidence"), "round": 2})
+                if "verdict" in h:
+                    status = h["verdict"] if h["verdict"] in ("confirmed", "rejected") else "hypothesis"
+                    ledger.append({"status": status, "round": 2, "hypothesis": h["cause"],
+                                   "text": f"replay with {h['replay']['change']}: step "
+                                   f"{'succeeded' if h['replay']['step_ok'] else 'still failed (' + str(h['replay']['label']) + ')'}"})
         sim_label = st["label"]
         top = it.get("hyps", [{}])[0] if it.get("hyps") else {}
         out.update(evidence=ev, simulator_label=sim_label, summary=d.get("output", {}).get("summary"),
-                   hypotheses=it.get("hyps", []), ledger=ledger, model_meta=d.get("meta"),
+                   hypotheses=it.get("hyps", []) + it.get("hyps2", []), ledger=ledger, model_meta=d.get("meta"),
+                   **({"camera": {**it["camera"], "image": str(pathlib.Path(it["camera"]["image"]).relative_to(
+                       ROOT / "runs").as_posix())}, "model_meta_second_look": it.get("diagnosis2", {}).get("meta")}
+                      if it.get("camera") else {}),
                    top_label=top.get("predicted_label"), top_label_correct=top.get("predicted_label") == sim_label,
                    any_label_correct=any(h["predicted_label"] == sim_label for h in it.get("hyps", [])),
                    cluster=f"{ev['object']['template']}/{ev['grasp_used']}")
@@ -281,5 +384,10 @@ def _metrics(cases):
             "hypotheses_tested": len(hyps), "confirmed": conf, "rejected": len(hyps) - conf - inconc,
             "inconclusive_range_limited": inconc,
             "cases_with_a_confirmed_cause": sum(any(h.get("verdict") == "confirmed" for h in c["hypotheses"]) for c in rep),
+            "cases_confirmed_first_look": sum(any(h.get("verdict") == "confirmed" for h in c["hypotheses"]
+                                                  if h.get("round", 1) == 1) for c in rep),
+            "second_look_cases": sum(bool(c.get("camera")) for c in rep),
+            "cases_confirmed_second_look": sum(any(h.get("verdict") == "confirmed" for h in c["hypotheses"]
+                                                   if h.get("round") == 2) for c in rep),
             "top_hypothesis_confirmed": top_conf,
             "by_simulator_label": {k: f"{v[0]}/{v[1]}" for k, v in by_label.items()}}

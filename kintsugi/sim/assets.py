@@ -168,6 +168,8 @@ def add_asset(body, oid: str, name: str, params: dict) -> dict:
     meta = {"height": a["height"], "width": a["width"], "hollow": bool(a["meta"].get("hollow", False)),
             "bottom_offset": 0.0, "half_x": (a["hi"][0] - a["lo"][0]) / 2, "half_y": (a["hi"][1] - a["lo"][1]) / 2,
             "asset": name}
+    if meta["hollow"]:                           # an imported container (basket, bin, bowl): things go inside it
+        meta.update(rim_z=a["height"], floor_z=min(0.02, 0.2 * a["height"]))
     j = a.get("joint")
     if j:
         full = j["range"][1] if j["type"] == "slide" else min(j["range"][1], math.radians(MAX_OPEN_DEG))

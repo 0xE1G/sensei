@@ -53,13 +53,16 @@ def main():
     ap.add_argument("--clusters", nargs="*", default=None)
     ap.add_argument("--backend", choices=BACKENDS, default=None)
     ap.add_argument("--workers", type=int, default=default_workers())
+    ap.add_argument("--vision", choices=["on", "off", "text"], default=None,
+                    help="second look with camera evidence for unexplained cases (default: KINTSUGI_VISION, on)")
     a = ap.parse_args()
     rep = json.loads(pathlib.Path(a.from_search).read_text())
     cases = pick_cases(rep, a.per_cluster, a.clusters)
     print(f"{len(cases)} cases from {sorted({c['source']['cluster'] for c in cases})}")
     inv = Investigator(a.workers, library=seed_library() if a.library == "seed" else None,
                        performance={} if a.library == "seed" else None, library_name=a.library,
-                       client=ModelClient(a.backend))
+                       client=ModelClient(a.backend), vision=None if a.vision is None else a.vision != "off",
+                       look_images=a.vision != "text")
     out = inv.run(cases)
     m = out["metrics"]
     print(json.dumps(m, indent=1))

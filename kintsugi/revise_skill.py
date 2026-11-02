@@ -26,7 +26,6 @@ import numpy as np
 
 from .create_skill import CAPABILITIES, SkillCreator, _log
 from .search.explore import ALPHA, REGRESSION_TASKS, mcnemar_p
-from .agents.llm import ModelRejected
 from .runner import ROOT, wilson
 from .skills.library import load_cards, save_card, rel
 from .tasks.splits import split_seeds
@@ -148,7 +147,8 @@ class SkillReviser(SkillCreator):
                f"{ {k: v['default'] for k, v in self.old['params'].items()} }")
         res = self.client.complete("propose_primitive", {"capability": f"{self.kind}: {self.cap['description']}",
                                                          "why": why, "obj": obj, "target": target, "goal": goal,
-                                                         "feedback": feedback, "other_strategies": others})
+                                                         "feedback": feedback, "other_strategies": others},
+                                   images=self._fb_images if feedback else None)
         out = res.output
         name = out["name"] if out["name"].startswith(self.kind) else f"{self.kind}_{out['name']}"
         card = {"name": name, "version": 1, "kind": self.kind, "impl": "generated", "code": out["code"],
@@ -265,7 +265,7 @@ class SkillReviser(SkillCreator):
                 for i in range(k):
                     try:
                         card, meta = self.propose(before, feedback, others or None)
-                    except ModelRejected as e:           # an invalid proposal is a failed strategy, not a crash
+                    except Exception as e:               # an invalid proposal (or a model error) is a failed strategy, not a crash
                         rejected.append(str(e))
                         self.report["phases"].setdefault("proposals", []).append(
                             {"attempt": attempt, "option": i, "rejected": str(e), "feedback": feedback})
@@ -300,7 +300,7 @@ class SkillReviser(SkillCreator):
                 feedback = self.gate_feedback(card, g) + (
                     f"\nOn the scenes the old skill was verified on, the revision succeeded "
                     f"{g['hold'].get('success')}/{g['hold'].get('trials')} (the old skill {g['hold'].get('before')}); "
-                    "it must keep working there." if not g["hold"]["pass"] else "")
+                    "it must keep working there." if not g["hold"]["pass"] else "") + self.feedback_images(card)
             return self.report
         finally:
             self._save()

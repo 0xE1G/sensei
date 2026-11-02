@@ -49,6 +49,13 @@ SCHEMA = {
 }
 
 
+def _imported_container(template: str) -> bool:
+    """A hollow imported model (a basket, a bin, a scanned bowl): a valid target for 'inside'."""
+    from ...sim.assets import assets
+    a = assets().get(template)
+    return bool(a and a["meta"].get("hollow") and not a.get("joint"))
+
+
 def refresh_templates():
     """Templates registered after start-up (downloaded objects) become valid in the schema (list updated in place)."""
     enum = SCHEMA["properties"]["task"]["properties"]["objects"]["items"]["properties"]["template"]["enum"]
@@ -66,6 +73,7 @@ def catalog_text() -> str:
             extra = (f" (imported model, {100 * a['width']:.0f} x {100 * a['height']:.0f} cm"
                      + (f", {DEFAULTS[t]['color']} (fixed by its texture)" if DEFAULTS[t].get("color") else "")
                      + (f", moving part '{ARTICULATED[t]['part']}'" if t in ARTICULATED else "")
+                     + (", hollow container" if _imported_container(t) else "")
                      + (f": {a['meta']['description']}" if a["meta"].get("description") else "") + ")")
         lines.append(f"- {t}: {rng}{extra}")
     lines.append(f"Colours: {', '.join(sorted(COLORS))}.")
@@ -126,10 +134,12 @@ def validate(out, inputs) -> list[str]:
             errs.append(f"goal '{g['pred']}' for {g['obj']} needs a target")
         if g["pred"] in ("inside", "on") and g["obj"] in by_id and g.get("target") in by_id:
             tt = by_id[g["target"]]["template"]
-            if g["pred"] == "inside" and tt not in CONTAINERS_INSIDE:
-                errs.append(f"'inside' needs a bowl, cup or bin as target, not {tt} ({g['target']}); use 'on' for trays and zones")
+            if g["pred"] == "inside" and tt not in CONTAINERS_INSIDE and not _imported_container(tt):
+                errs.append(f"'inside' needs a bowl, cup, bin or a hollow imported object as target, not {tt} "
+                            f"({g['target']}); use 'on' for trays and zones")
             if g["pred"] == "on" and tt not in SURFACES_ON | CONTAINERS_INSIDE | STACKABLE:
-                errs.append(f"'on' needs a tray, zone, or a block/bar/cylinder to stack on, not {tt} ({g['target']})")
+                errs.append(f"'on' needs a tray, zone, or a block/bar/cylinder to stack on, not {tt} ({g['target']})"
+                            + ("; use 'inside' for a hollow imported object" if _imported_container(tt) else ""))
             if by_id[g["obj"]].get("role", "item") != "item":
                 errs.append(f"goal object '{g['obj']}' must have role item")
         goal_objs.append(g["obj"])

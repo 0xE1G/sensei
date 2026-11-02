@@ -671,7 +671,104 @@ round started by the search (see status).
      moved aside -> hint -> Download the rest -> byte-identical, served by the running server without restart),
      first-run screen (robot folder renamed temporarily), Masks select; fake-key round trip (masked, not leaked, http
      address refused); SAM job refused by the server.
-9. **Spark + SAM switch-over**, re-run reported experiments on Meta models, perception gap on ~50 episodes.
+9. **Spark evaluation and final numbers (agreed plan, user 2026-11-02)**. Spark is the main model, Claude the safe
+   fallback; SAM only on real images (photos / videos), never in the simulation loop (simulator masks are exact).
+   9.1 Spark main, Claude fallback per call: a Spark error or timeout re-sends the same request to Claude; the record
+       says so (`fallback`), and fallback answers are never counted as Spark results. Studio default pinned to Spark.
+   9.2 Speed: Spark spends most of its time in hidden reasoning (4-6k completion tokens per diagnosis, 50-80 s).
+       Check the API for a reasoning-effort setting; measure fast vs thorough per job before using it.
+   9.3 Spark evaluation suite, each job vs Claude and the rule stand-in on the same inputs, with latency and cost:
+       prompt -> task spec (fixed prompt set incl. refuse / clarify cases: correct status and goals); plan programs
+       (new tasks verified on fresh scenes vs the fixed plan); new skills from scratch (push, stand-up, drawer
+       open/close: promoted or not, trials, held-out success); diagnosis (re-run after 9.2); retrieval / transfer
+       (mug, scanned objects); failure-search proposals (valid failures per 100 trials).
+   9.4 Muse Wonder, one experiment only where Spark struggles most: writing new motion code (propose_primitive in
+       skill creation from scratch). Keep it only if it promotes skills more often or in fewer rounds; few calls, so the
+       price ($4 / $20 per M tokens vs $0.10 / $0.20) stays small. Otherwise Spark everywhere.
+   9.5 Fix what Spark gets wrong: prompts stay shared by every backend; each fix checked on Spark and Claude.
+   9.6 Headline harness (one command, fixed seeds, repeats for error bars, dry-run call count), then the frozen test
+       sets once (incl. the 10 untouched scanned test objects); freeze the numbers.
+   9.7 Figures, research-paper style: one central figure (the loop prompt -> plan -> run -> diagnose -> search -> gate
+       -> library, annotated with measured numbers) plus small charts: success before/after repair incl. held-out,
+       trials to success transfer vs scratch (log scale), failure-search trend over rounds, per-job model comparison
+       (Spark / Claude / rule), skills created from scratch.
+   9.8 Then real images: task from a photo, task from a video (9b), with SAM 3.1; perception gap on ~50 episodes
+       with SAM masks as a credibility number.
+8o. **Meta Model API live + visual evidence for stuck failures (2026-11-02)**:
+   - Meta Model API configured in the local settings (git-ignored): base https://api.meta.ai/v1 (OpenAI-compatible
+     /chat/completions, checked), model `muse-spark-1.3-contributor` (user choice: cheaper; data may be used by Meta).
+     Images as base64 data URLs (<= 50 per request); SAM 3.1 is `sam-3.1` on POST /v1/responses (streamed; mask format
+     to read from /docs/sam/reading-segmentation when the SAM client is written). Client: token usage logged per call
+     in cache/llm/calls.jsonl; transient errors (timeouts, 429, 5xx) retried twice with back-off, timeout 420 s (Spark
+     reasons long: diagnose calls 50-80 s, ~3k prompt + 4-6k completion tokens, about $0.001 each); HTTP errors show the
+     API's message without the request. Creator / reviser: any proposal error is a failed strategy, never a crash.
+   - `kintsugi/evidence.py`: exact replay of the failing episode with a FrameTap in the recorder slot (renders locally
+     every 0.25 s around the step: no model or SAM call), <= 5 moments chosen from observable signals (skill timeline,
+     finger opening, the object's motion from camera depth + segmentation, first arm contact), one JPEG contact sheet
+     (front camera with perceived objects outlined + ids + hand path; close-up beside the hand) + a text list of the
+     moments. Masks are the episode's own perception masks, so evidence never adds SAM calls. ~4 s per sheet.
+   - `ModelClient.complete(job, inputs, images=[...])`: spark = image parts; claude_cli = Read tool only, in a temp folder
+     holding just the images; rule ignores them; image content is part of the cache key; records say images were sent.
+   - Escalation only (never touches a case that already worked): Investigator second look (`vision`, default ON via
+     KINTSUGI_VISION, not with the rule backend): cases whose every first hypothesis was rejected get the sheet +
+     "already_tested" (diagnose prompt v5) -> new hypotheses (duplicates dropped) -> one-change replays; ledger + report
+     mark round 2; metrics cases_confirmed_first_look / second_look_cases / cases_confirmed_second_look. Control arm
+     `look_images=False` (`scripts/investigate.py --vision text`). Creator / reviser: after failed gates the revision
+     also gets sheets of one failed and one successful TRAINING scene (confirmation run; never held-out scenes)
+     (propose prompt v7) - default OFF (KINTSUGI_VISION_CREATE=1): mechanism checked (weak candidate 0/8 -> failure sheet
+     -> revision request sent), effect not measured yet. Investigator page shows the sheet (/api/image).
+   - Measurement (Spark, same failures, first look identical): seed-library failures 16 (structural: bowls/cups wider
+     than the opening, no one-change fix exists): second look with images 0/12 vs text-only 0/13. Expert-solvable
+     scanned-object failures, current library, 14: first look explained 11; second look with images 1/3 (dog bowl slip)
+     vs text-only 0/3 -> 12/14 vs 11/14, label accuracy equal (0.714). Meets the pre-declared rule (more confirmed causes,
+     accuracy not lower) by ONE case: not significant; adopted because it cannot change explained cases and costs
+     ~$0.001 per stuck case. Runs: runs/20261102-194945_investigate, 20261102-200139_investigate, runs/ab_scanned_images,
+     runs/ab_scanned_text.
+8p. **Spark evaluation, first results (2026-11-02, `scripts/eval_models.py`)**:
+   - Client: Spark main, per-call Claude fallback (`ModelClient(fallback=...)`, setting spark_fallback default on, a
+     Settings toggle): a failed Spark call (error, timeout, rejected twice) is re-sent to Claude, marked backend
+     claude_cli + requested_backend spark + fallback reason, cached under Claude's key; evaluations pass fallback=False.
+     `reasoning_effort` per request (docs/reasoning: minimal..xhigh; max not on the contributor model) and optional
+     `response_format` json_schema; both in the cache key. Measured per-job effort defaults `SPARK_EFFORT`:
+     task_spec low, plan_program low; diagnosis keeps the model's own level. Token totals in ModelClient.stats.
+   - Task spec (20 prompts incl. 4 refusals and 1 clarification, prompt v10): rule 10/20, Claude 20/20 (median 5.2 s),
+     Spark own effort 19/20 (14.5 s; asked to clarify an ordered task), Spark low 20/20 (8.6 s); low + schema-constrained
+     13/20 (the constraint drops the optional refusal reason / clarifying question): schema output stays off.
+     Found on the way: hollow imported objects (scanned basket, storage bin, bowls) could not be "inside" targets; now
+     containers (asset meta rim_z / floor_z, validator `_imported_container`, catalogue "hollow container", prompt v10):
+     balls into the scanned basket 8/8, storage bin 8/8, expert 16/16.
+   - Plan programs (7 tasks x 8 fresh scenes, seeds 700+): rule / Claude / Spark / Spark low all 48/56 = the fixed plan;
+     close_drawer 0/8 for all (no closing skill in the library: missing capability, correctly reported). Spark wrote 7/7
+     valid programs. The fixed plan has absorbed what programs used to add, so this suite does not separate models.
+   - Diagnosis, scanned failures (14, current library): Spark own effort first look 11/14 (median 61 s), low effort 8/14
+     (23 s); second look at low effort: images 4/6 vs text-only 3/6 (12/14 vs 11/14). Across the fixable sets the images
+     confirmed 5/9 stuck cases vs 3/9 without: same direction each time, small numbers.
+   - New skills from scratch (library without any card of that kind, dry run), Spark own effort: push, stand_up,
+     open_drawer, close_drawer ALL promoted in round 1: held-out 16/16, 16/16, 14/16, 14/16 vs 0/16, regression pass,
+     11-16 min and 23-49k completion tokens each (runs/20261102-215706_eval_skills). Claude, same code and conditions
+     (runs/20261102-224957_eval_skills): push 16/16, open 16/16, close 13/16 in round 1 (5-8 min each, only 1-2 of its 3
+     strategies had working settings), stand_up FAILED (0/41 settings in both rounds; an earlier run had succeeded:
+     run-to-run variance). Muse Wonder on the job hardest for Spark (stand_up by search yield): promoted in round 1,
+     held-out 15/16, 20.5 min, 91k completion tokens (~$1.80) vs Spark 16/16, 15.5 min, ~$0.01 -> no added value; Spark
+     stays the model for every job (decision rule of 9.4).
+   - Retrieval / transfer (scripts/transfer.py --no-scratch): mug -> rim_pinch "like the bowl", verified 9/10 with Spark
+     and with Claude; scanned mug_blue -> rim_pinch, 10/10 both. Fixed on the way: region_scenario crashed for imported
+     objects (no shape parameter to cut into held-out bands; now sampled without bands).
+   - Failure search, model strategy only, current library, 160 trials: Spark 21 valid failures (13.1 per 100, 3
+     clusters: cylinder/centre_grasp drop+wrong_place 18, bowl/top_grasp 2, bowl/rim_pinch 1) vs Claude 6 (3.8 per 100,
+     2 clusters) (runs/20261102-233759_failsearch, 20261102-234748_failsearch). One run each.
+   - Spark-written skills added to the USER library (2026-11-03, local, git-ignored): push_closed_side_blade,
+     stand_up_center_air_rotate, open_drawer_spark, close_drawer (rebuilt from the gated dry-run reports with their
+     tuned values and lineage). Head-to-head on 16 fresh scenes (seeds 900-915), every card of a kind forced alone,
+     recorded as routing evidence for all of them: push 16/16 both; stand_up 16/16 both; open_drawer Claude's open_drawer
+     and open_drawer_stall_detect 16/16, Spark's 10/16 (gate had 14/16); close_drawer (Spark, the only closing skill)
+     16/16. Router now: push / stand_up tie (Spark card first by name), open_drawer -> open_drawer_stall_detect,
+     close_drawer -> close_drawer; the close_drawer task, missing before, 8/8. To ship them: scripts/skills.py contribute.
+   - Summary: Spark >= Claude on every job measured except diagnosis confirmations at low effort; better at creating
+     skills (4/4 vs 3/4 round-1 promotions) and at finding failures (3.5x); slower per call (reasoning). Smoke 32/32.
+9b. Later (user, 2026-11-02): learn a task from a video (Spark video input + SAM 3.1 tracking -> spec + plan
+   program, verified as a composite; measured on rendered expert clips first) and task from a photo (goal photo ->
+   measurable goals; photo of a real table -> simulated copy). See docs/implementation_plan.md optional 1 / 1b.
 10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
    primitive + particle liquid), video imitation, curriculum, self-proposed tasks.
 

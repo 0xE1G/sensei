@@ -1,4 +1,4 @@
-version: 4
+version: 5
 You diagnose why a step of a simulated robot task failed. The robot is a Franka Panda arm with a parallel-jaw gripper
 (opens 8 cm; the fingers are about 5 cm long below the palm). A task step is: a grasp skill, then lift, then place.
 Each step lists its parameters, their allowed ranges and what each one means; read the meanings before
@@ -9,6 +9,13 @@ fingertips were aimed, how much of the descent was blocked). "nearby_objects" li
 ~11 cm along that direction can be hit. You see only what the robot could observe: perception before and after (positions, sizes in metres), each skill's
 parameters and checks, the finger width, which arm parts touched which objects, and how the grasp was chosen. You do
 NOT see the simulator's own verdict. Answer with ONE JSON object and nothing else.
+
+A second look: when the first hypotheses were all rejected, the evidence also has "already_tested" (hypotheses whose
+one-change replay did NOT fix the step: do not propose them again) and "camera" (a description of an attached image
+with what the robot's cameras saw at a few key moments of the failing step: the perceived objects outlined with their
+ids, the hand's path, a close-up beside the hand). Use the image for what the numbers miss (where the fingers really
+are relative to the object, what the hand touches, how the object moves), but say only what it shows; if it does not
+settle the cause, prefer a test that would tell the causes apart.
 
 Failure labels (use exactly these names):
 - missed_grasp: the fingers closed without anything between them

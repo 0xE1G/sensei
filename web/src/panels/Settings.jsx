@@ -163,6 +163,9 @@ export function SettingsDrawer({ onClose, onChanged }) {
                 <Plain label="API address" field="meta_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://…/v1" />
                 <Plain label="Model" field="meta_model" s={s} edit={edit} setEdit={setEdit} placeholder="muse-spark" />
                 <Secret label="API key" field="meta_api_key" s={s} edit={edit} setEdit={setEdit} />
+                <label className="toggle" title="A Spark call that fails or times out is sent to Claude instead; the answer is marked as Claude's and never counted as Spark's">
+                  <input type="checkbox" checked={s.spark_fallback !== "0"} onChange={(e) => setDefault("spark_fallback", e.target.checked ? "1" : "0")} />
+                  {" "}If Spark fails, ask Claude (marked as a fallback)</label>
                 <div className="set-actions">
                   <button className="btn primary" onClick={() => save(["meta_api_base", "meta_model", "meta_api_key"])}>Save</button>
                   <button className="btn" disabled={!s.meta_api_key?.set || !s.meta_api_base} onClick={() => test("spark")}>Test connection</button>

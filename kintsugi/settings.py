@@ -23,6 +23,7 @@ FIELDS = {
     "sam_api_base": ("SAM_API_BASE", False, None),
     "default_backend": (None, False, ("rule", "claude_cli", "spark")),   # the Studio's default only, never scripts
     "default_masks": (None, False, ("sim", "sam")),
+    "spark_fallback": (None, False, ("0", "1")),        # "0" turns the Claude fallback off (default on)
 }
 
 

@@ -167,6 +167,15 @@ def get_trial(run: str, name: str):
     return _read(p)
 
 
+@app.get("/api/image")
+def get_image(path: str):
+    """An evidence image (contact sheet) inside runs/."""
+    p = _safe(path)
+    if p.suffix.lower() not in (".jpg", ".jpeg", ".png") or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="image/png" if p.suffix.lower() == ".png" else "image/jpeg")
+
+
 @app.get("/api/replay")
 def get_replay(run: str, name: str):
     """A pose log (every body's position and orientation at 30 fps + the static scene), already gzip-compressed."""
