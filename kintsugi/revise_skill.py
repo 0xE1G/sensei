@@ -28,7 +28,7 @@ from .create_skill import CAPABILITIES, SkillCreator, _log
 from .search.explore import ALPHA, REGRESSION_TASKS, mcnemar_p
 from .agents.llm import ModelRejected
 from .runner import ROOT, wilson
-from .skills.library import load_cards, save_card
+from .skills.library import load_cards, save_card, rel
 from .tasks.splits import split_seeds
 
 
@@ -224,9 +224,9 @@ class SkillReviser(SkillCreator):
             perf = with_evidence(perf, self.old["name"], g, old_k, n, self.run_id)
             save_performance(perf)
             self.report["evidence"] = {"group": g, card["name"]: [new_k, n], self.old["name"]: [old_k, n]}
-        self.report["promoted"] = {"card": card["name"], "path": str(path.relative_to(ROOT)),
+        self.report["promoted"] = {"card": card["name"], "path": str(rel(path)),
                                    "parent": self.report["parent"]}
-        _log(f"PROMOTED {card['name']} beside {self.old['name']} -> {path.relative_to(ROOT)}")
+        _log(f"PROMOTED {card['name']} beside {self.old['name']} -> {rel(path)}")
         self._save()
 
     def run(self):

@@ -15,7 +15,7 @@ from __future__ import annotations
 import copy
 import json
 
-from .library import LIB_DIR, OPEN_WIDTH
+from .library import LIB_DIR, OPEN_WIDTH, load_merged, save_merged
 
 PERF_FILE = LIB_DIR / "performance.json"
 TALL = 0.085            # m; above this a grasp at half height puts the palm on the object's top
@@ -30,12 +30,17 @@ def shape_group(desc: dict) -> str:
 
 
 def load_performance(path=None) -> dict:
-    p = path or PERF_FILE
-    return json.loads(p.read_text()) if p.exists() else {}
+    """Routing evidence: the base library's merged with the user library's (or one file if `path` is given)."""
+    if path is None:
+        return load_merged("performance.json")
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def save_performance(perf: dict, path=None):
-    (path or PERF_FILE).write_text(json.dumps(perf, indent=1, sort_keys=True))
+    """Saved into the user library (only entries that differ from the base), or to `path`."""
+    if path is None:
+        return save_merged("performance.json", perf)
+    path.write_text(json.dumps(perf, indent=1, sort_keys=True))
 
 
 def with_evidence(perf: dict, card: str, group: str, success: int, trials: int, source: str) -> dict:
@@ -61,12 +66,15 @@ def load_patches(path=None) -> dict:
     """Parameter patches per (skill, shape group), e.g. release lower for tall narrow objects:
     {"<skill>": {"<group>": {"params": {...}, "evidence": {...}, "sources": [...], "triggers": [...], "diff": {...}}}}
     They change a skill's parameters only for objects of that group; promoted through the same gates as cards."""
-    p = path or PATCH_FILE
-    return json.loads(p.read_text()) if p.exists() else {}
+    if path is None:
+        return load_merged("patches.json")
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def save_patches(patches: dict, path=None):
-    (path or PATCH_FILE).write_text(json.dumps(patches, indent=1, sort_keys=True))
+    if path is None:
+        return save_merged("patches.json", patches)
+    path.write_text(json.dumps(patches, indent=1, sort_keys=True))
 
 
 def patch_for(patches: dict, skill: str, group: str) -> dict:

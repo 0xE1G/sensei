@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
-LIB = ROOT / "skill_library"
+LIB = ROOT / "skill_library"            # base library (shipped); local discoveries live in the user library
 WEB_DIST = ROOT / "web" / "dist"
 
 app = FastAPI(title="Kintsugi")
@@ -178,17 +178,36 @@ def get_replay(run: str, name: str):
 
 @app.get("/api/skills")
 def skills():
-    def cards(dirname=None):
-        d = LIB / dirname if dirname else LIB
-        return [c for c in (_read(p) for p in sorted(d.glob("*.json"))) if "name" in c] if d.exists() else []
+    """Base library (skill_library/, shipped) merged with the user library (what this checkout discovered); every
+    card carries "origin": "base" | "user", evidence and patches are the merged view the router uses."""
+    from kintsugi.skills import library as L
+
+    def cards(dirname=None, merged=True):
+        out = {}
+        for origin, root in (("base", LIB), ("user", L.USER_DIR)) if merged else (("base", LIB),):
+            d = root / dirname if dirname else root
+            for p in sorted(d.glob("*.json")) if d.exists() else []:
+                c = _read(p)
+                if "name" in c:
+                    out[c["name"]] = {**c, "origin": origin}
+        return list(out.values())
     hist = {}
-    for p in sorted((LIB / "history").glob("*.json")) if (LIB / "history").exists() else []:
-        c = _read(p)
-        hist.setdefault(c["name"], []).append(c)
-    return {"active": cards(), "history": hist, "primitives": cards("primitives"), "reference": cards("reference"),
-            "composites": cards("composites"),
-            "performance": _read(LIB / "performance.json") if (LIB / "performance.json").exists() else {},
-            "patches": _read(LIB / "patches.json") if (LIB / "patches.json").exists() else {}}
+    for root in (LIB, L.USER_DIR):
+        for p in sorted((root / "history").glob("*.json")) if (root / "history").exists() else []:
+            c = _read(p)
+            if not any(h.get("version") == c.get("version") for h in hist.get(c["name"], [])):
+                hist.setdefault(c["name"], []).append(c)
+    for v in hist.values():
+        v.sort(key=lambda c: c.get("version", 0))
+    return {"active": cards(), "history": hist, "primitives": cards("primitives", False),
+            "reference": cards("reference", False), "composites": cards("composites"),
+            "performance": L.load_merged("performance.json"), "patches": L.load_merged("patches.json"),
+            "user_library": L.rel(L.USER_DIR)}
+
+
+def _active_cards() -> dict:
+    from kintsugi.skills.library import load_cards
+    return load_cards()
 
 
 @app.get("/api/headlines")
@@ -252,7 +271,7 @@ def headlines():
         cs = [_read(d / "report.json") for d in latest.get("create_skill", [])]
         prom = [r for r in cs if r.get("outcome") == "promoted" and r.get("phases", {}).get("proposals", [{}])[0]
                 .get("meta", {}).get("backend") == "claude_cli"
-                and (LIB / f"{r['promoted']['card']}.json").exists()]        # only skills still in the library
+                and r["promoted"]["card"] in _active_cards()]                 # only skills still in the library
         if prom:
             r = prom[-1]
             g = r["phases"]["gate"]["held_out"]
@@ -313,7 +332,7 @@ def progress():
         "repairs": sum(r["outcome"] in ("promoted", "patched", "routed") for r in out["repairs"]),
         "search_first": out["search"][0]["per100"]["random"] if out["search"] else None,
         "search_last": out["search"][-1]["per100"]["random"] if out["search"] else None,
-        "skills": len([p for p in LIB.glob("*.json") if p.stem not in ("performance", "patches")]),
+        "skills": len(_active_cards()),
     }
     return out
 

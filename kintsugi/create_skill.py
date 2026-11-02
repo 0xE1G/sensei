@@ -7,7 +7,7 @@
     tune      Optuna on the best candidates (perturbed physics), confirmed on fresh scenes
     gate      held-out scenes: after (program using the new card) vs before (current library), paired McNemar test,
               >= 70% success; regression tasks unchanged
-    promote   skill_library/<name>.json: kind = the capability, impl "generated", the code, tuned defaults, lineage
+    promote   user_library/<name>.json: kind = the capability, impl "generated", the code, tuned defaults, lineage
               (source "model-written primitive", who wrote it, attempts, search and gate evidence)
 
 The task is a named task (scripts/create_skill.py) or a typed request's task spec with the plan program that asked
@@ -25,7 +25,7 @@ import numpy as np
 from .agents.llm import ModelRejected
 from .runner import ROOT, TrialPool, trial_cfg, wilson
 from .search.explore import ALPHA, REGRESSION_TASKS, TUNE_PERTURB, mcnemar_p
-from .skills.library import LIB_DIR, save_card
+from .skills.library import LIB_DIR, save_card, rel
 from .tasks.splits import split_seeds
 
 WASTE_WEIGHT = 0.1     # tuning objective: success rate - 0.1 x wasted-motion fraction (a tie-breaker)
@@ -342,8 +342,8 @@ class SkillCreator:
                             "results": {"held_out": [gate["held_out"]["before"], gate["held_out"]["success"],
                                                      gate["held_out"]["trials"]], "p_value": gate["held_out"]["p_value"]}}]
         path = save_card(card)
-        self.report["promoted"] = {"card": card["name"], "path": str(path.relative_to(ROOT))}
-        _log(f"PROMOTED {card['name']} -> {path.relative_to(ROOT)}")
+        self.report["promoted"] = {"card": card["name"], "path": str(rel(path))}
+        _log(f"PROMOTED {card['name']} -> {rel(path)}")
         self._save()
 
     def run(self):

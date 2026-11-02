@@ -12,11 +12,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 @functools.lru_cache(maxsize=1)
 def code_version() -> dict:
-    """git commit (if any) plus a content hash of the source and skill library, so uncommitted work is identified."""
+    """git commit (if any) plus a content hash of the source and both skill libraries (base + user), so uncommitted
+    work and local discoveries are identified."""
+    from .skills.library import USER_DIR
     h = hashlib.sha1()
-    for p in sorted([*ROOT.glob("kintsugi/**/*.py"), *ROOT.glob("skill_library/**/*.json"),
+    for p in sorted([*ROOT.glob("kintsugi/**/*.py"), *ROOT.glob("skill_library/**/*.json"), *(USER_DIR.glob("**/*.json") if USER_DIR.exists() else []),
                      ROOT / "experiments" / "splits.json"]):
-        h.update(p.relative_to(ROOT).as_posix().encode())
+        h.update((p.relative_to(ROOT) if p.is_relative_to(ROOT) else p).as_posix().encode())
         h.update(p.read_bytes())
     out = {"code_hash": h.hexdigest()[:12], "git": None, "dirty": None}
     try:

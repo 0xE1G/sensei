@@ -56,6 +56,7 @@ function CardDetail({ card, history, performance, patches }) {
       <section className="card">
         <div className="skill-head">
           <h3>{nice(card.name)}</h3><span className="ver">v{card.version}</span>
+          {card.origin === "user" && <span className="ver" title="In this checkout's user library (user_library/), not in the shipped library">local</span>}
           <Chip status={st === "measured" ? "hypothesis" : st}>{label}</Chip>
         </div>
         <p className="lead">{card.description}</p>
@@ -174,7 +175,7 @@ export default function Skills() {
               <button key={c.name} className={card?.name === c.name ? "on" : ""} onClick={() => setSel(c.name)}>
                 <span className="exp-title">{nice(c.name)}</span>
                 <span className="sub">v{c.version}</span>
-                <span className="origin-word">{shortOrigin(c)}</span>
+                <span className="origin-word">{shortOrigin(c)}{c.origin === "user" ? " · local" : ""}</span>
               </button>
             ))}
           </div>

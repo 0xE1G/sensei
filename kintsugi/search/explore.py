@@ -2,10 +2,10 @@
 
     before   run the task with the active library on train objects -> failure cluster (object, skill, shape)
     existing first try the library's other cards that fit the object; if one already works, the repair is a
-             routing change (evidence in skill_library/performance.json), gated like any other change
+             routing change (evidence in the user library's performance.json), gated like any other change
     patch    if the step fails after the grasp (drop, tip, slip) or the investigator confirmed causes: search
              parameter patches for the object's shape group (release height, speeds, grip force, grasp depth),
-             seeded with the confirmed one-change fixes; smallest best patch is gated (skill_library/patches.json)
+             seeded with the confirmed one-change fixes; smallest best patch is gated (user library patches.json)
     sample   perceive the failing objects, sample feature_pinch candidates, keep those that fit the gripper
              on most of them (geometry) and that the arm can reach (IK)
              (candidate trials run on the failing item's sub-task alone: same object, its target, nothing else)
@@ -14,7 +14,7 @@
     tune     Optuna (TPE) on the best family, seeded with its best candidates, on fixed train seeds
     gate     on the full task; a candidate card is promoted only if it (a) fixes the failure cluster, (b) leaves the other
              tasks unchanged, (c) holds on held-out (dev) objects. Otherwise the next family is tried.
-    promote  new card version in skill_library/ with lineage; the old version goes to history/
+    promote  new card version in the user library (user_library/) with lineage; the old version goes to history/
 
 Every trial is a normal episode record (runs/<run_id>/trials/<tag>_<seed>.json). The full story, including
 rejected candidates and failed gates, is in runs/<run_id>/report.json for the web app.
@@ -124,7 +124,7 @@ class Explorer:
         upper bound < min_fail_rate): the gates need ~10 failed cases, so a rare failure costs a long search that
         cannot pass them. None = off (experiments).
         `library`: the card set every trial uses (default: the active library, snapshotted now).
-        `performance`: routing evidence (default: skill_library/performance.json; {} for the seed library).
+        `performance`: routing evidence (default: base + user library; {} for the seed library).
         `task_kwargs`: e.g. {"region": ...} to repair a failure-search cluster with region-sampled probe scenes."""
         self.task_kwargs = task_kwargs or {}
         self.perf = load_performance() if performance is None else performance
@@ -614,7 +614,7 @@ class Explorer:
                 groups["triggers"].append(trigger)
         save_performance(perf)
         self.report["routed"] = {"card": card_name, "instead_of": cluster["skill"],
-                                 "groups": sorted(perf.get(card_name, {})), "performance_file": "skill_library/performance.json"}
+                                 "groups": sorted(perf.get(card_name, {})), "performance_file": L.rel(L.USER_DIR / "performance.json")}
         _log(f"ROUTED {cluster['obj']}: {card_name} instead of {cluster['skill']} "
              f"(groups {self.report['routed']['groups']})")
         self._save()
@@ -645,8 +645,8 @@ class Explorer:
         path = L.save_card(card)
         if perf is not None:
             save_performance(self._final_perf(perf, card["name"], gate))
-        self.report["promoted"] = {"card": card, "path": str(path.relative_to(ROOT))}
-        _log(f"PROMOTED {card['name']} v{card['version']} -> {path.relative_to(ROOT)}")
+        self.report["promoted"] = {"card": card, "path": str(L.rel(path))}
+        _log(f"PROMOTED {card['name']} v{card['version']} -> {L.rel(path)}")
         self._save()
 
     # ------------------------------------------------------------------ parameter patches
@@ -742,7 +742,7 @@ class Explorer:
                 e["date"] = time.strftime("%Y-%m-%d")
         save_patches(patches)
         self.report["patched"] = {"values": {f"{k[0]}.{k[1]}": v for k, v in chosen["values"].items()},
-                                  "groups": groups, "source": chosen["source"], "file": "skill_library/patches.json"}
+                                  "groups": groups, "source": chosen["source"], "file": L.rel(L.USER_DIR / "patches.json")}
         _log(f"PATCHED {self.report['patched']['values']} for groups {groups} (source: {chosen['source']})")
         self._save()
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
 from dataclasses import dataclass, field
 
@@ -15,7 +16,15 @@ import numpy as np
 
 from ..sim.robot import down_rotation
 
-LIB_DIR = pathlib.Path(__file__).resolve().parents[2] / "skill_library"
+# Two libraries with the same layout. The BASE library (skill_library/, tracked) ships with the code and is read-only
+# at run time; everything this checkout discovers (cards, new versions, routing evidence, patches, composites) goes to
+# the USER library (user_library/, git-ignored; KINTSUGI_USER_LIBRARY overrides the folder). Reads merge both, the
+# user entry winning (a card by name; evidence and patches per (skill, shape group)). So local learning never edits
+# shipped files and a library update never overwrites local learning. Skill packs move items between libraries
+# (kintsugi.skill_packs: export / import; contribute = re-verify through the gates, then add to the base).
+BASE_DIR = pathlib.Path(__file__).resolve().parents[2] / "skill_library"
+LIB_DIR = BASE_DIR                       # reference/ and primitives/ (hand-written, never discovered) live only here
+USER_DIR = pathlib.Path(os.environ.get("KINTSUGI_USER_LIBRARY") or BASE_DIR.parent / "user_library")
 SAFE_Z = 0.28           # transport height for the TCP
 MIN_TCP_Z = 0.012       # keep fingertips off the table
 OPEN_WIDTH = 0.08
@@ -29,19 +38,62 @@ class SkillResult:
     info: dict = field(default_factory=dict)
 
 
-def load_cards(lib_dir=None) -> dict:
-    """Active skill cards (top level of the library folder; history/, reference/, primitives/ are not active)."""
+def _load_dir(lib_dir) -> dict:
     cards = {}
-    for p in sorted(pathlib.Path(lib_dir or LIB_DIR).glob("*.json")):
+    for p in sorted(pathlib.Path(lib_dir).glob("*.json")):
         c = json.loads(p.read_text())
         if "name" in c and "kind" in c:            # skip non-card files such as performance.json
             cards[c["name"]] = c
     return cards
 
 
+def load_cards(lib_dir=None) -> dict:
+    """Active skill cards (top level of a library folder; history/, reference/, primitives/ are not active).
+    Without lib_dir: the base library merged with the user library (a user card replaces the base card of that name)."""
+    if lib_dir is not None:
+        return _load_dir(lib_dir)
+    return {**_load_dir(BASE_DIR), **_load_dir(USER_DIR)}
+
+
+def rel(path) -> str:
+    """A library path for reports: relative to the repository when it lies inside it."""
+    path = pathlib.Path(path)
+    return path.relative_to(BASE_DIR.parent).as_posix() if path.is_relative_to(BASE_DIR.parent) else str(path)
+
+
+def card_origins() -> dict:
+    """{card name: "base" | "user"} for the merged library."""
+    return {**{n: "base" for n in _load_dir(BASE_DIR)}, **{n: "user" for n in _load_dir(USER_DIR)}}
+
+
+def load_merged(filename: str, user_dir=None) -> dict:
+    """A two-level evidence file (performance.json, patches.json): {skill: {group: entry}}, base merged with user."""
+    out = {}
+    for d in (BASE_DIR, pathlib.Path(user_dir or USER_DIR)):
+        p = d / filename
+        if p.exists():
+            for k, groups in json.loads(p.read_text()).items():
+                out.setdefault(k, {}).update(groups)
+    return out
+
+
+def save_merged(filename: str, data: dict, user_dir=None):
+    """Write `data` (a full merged view) as the user library's file: only the entries that differ from the base."""
+    base_p = BASE_DIR / filename
+    base = json.loads(base_p.read_text()) if base_p.exists() else {}
+    user = {}
+    for k, groups in data.items():
+        for g, e in groups.items():
+            if base.get(k, {}).get(g) != e:
+                user.setdefault(k, {})[g] = e
+    d = pathlib.Path(user_dir or USER_DIR)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / filename).write_text(json.dumps(user, indent=1, sort_keys=True))
+
+
 def seed_library(lib_dir=None) -> dict:
     """The hand-written starting library: active cards whose first version was a seed, at that version."""
-    lib = pathlib.Path(lib_dir or LIB_DIR)
+    lib = pathlib.Path(lib_dir or BASE_DIR)
     out = {}
     for name, c in load_cards(lib).items():
         if c["lineage"][0]["source"] != "seed":
@@ -57,11 +109,13 @@ def load_card_file(path) -> dict:
 
 
 def save_card(card: dict, lib_dir=None) -> pathlib.Path:
-    """Write an active card. The previous version, if any, is kept in history/ (never deleted)."""
-    lib = pathlib.Path(lib_dir or LIB_DIR)
+    """Write an active card (default: into the user library). The previous version, if any (also a base card of the
+    same name), is kept in that library's history/ (never deleted)."""
+    lib = pathlib.Path(lib_dir or USER_DIR)
+    lib.mkdir(parents=True, exist_ok=True)
     path = lib / f"{card['name']}.json"
-    if path.exists():
-        old = json.loads(path.read_text())
+    old = json.loads(path.read_text()) if path.exists() else (None if lib_dir else load_cards().get(card["name"]))
+    if old:
         (lib / "history").mkdir(exist_ok=True)
         (lib / "history" / f"{old['name']}_v{old['version']}.json").write_text(json.dumps(old, indent=2))
     path.write_text(json.dumps(card, indent=2))

@@ -3,7 +3,7 @@
 A program written by the model (or the stand-in) is safety-checked and every run is scored, but it is only TRUSTED for
 a kind of task after verification: it must succeed on fresh scenes (train and held-out seed blocks) and must not do
 worse than the fixed plan on the same scenes (paired test). Then it is saved as a composite card in
-skill_library/composites/ with its evidence and lineage, and later requests with the same task signature reuse it
+the user library's composites/ (user_library/composites/) with its evidence and lineage, and later requests with the same task signature reuse it
 without asking the model again.
 
 Signature: the goal structure in terms of object kinds, e.g. ["on:block->block", "on:block->block"] for a 3-block stack,
@@ -18,10 +18,11 @@ import time
 
 from .runner import ROOT, TrialPool, trial_cfg, wilson
 from .search.explore import mcnemar_p
-from .skills.library import LIB_DIR
+from .skills.library import LIB_DIR, USER_DIR, rel
 from .tasks.splits import split_seeds
 
-COMP_DIR = LIB_DIR / "composites"
+COMP_DIR = LIB_DIR / "composites"          # shipped (base library)
+USER_COMP_DIR = USER_DIR / "composites"     # verified here (user library); replaces a base composite of that name
 MIN_RATE = 0.8            # verification success needed on fresh scenes
 ALPHA = 0.05
 
@@ -50,9 +51,11 @@ def applicable(card: dict, task: dict) -> bool:
 
 
 def load_composites() -> dict:
-    if not COMP_DIR.exists():
-        return {}
-    return {c["name"]: c for c in (json.loads(p.read_text()) for p in sorted(COMP_DIR.glob("*.json")))}
+    out = {}
+    for d in (COMP_DIR, USER_COMP_DIR):
+        if d.exists():
+            out.update({c["name"]: c for c in (json.loads(p.read_text()) for p in sorted(d.glob("*.json")))})
+    return out
 
 
 def find_composite(task: dict) -> dict | None:
@@ -124,13 +127,13 @@ def verify_program(task: dict, program: str, workers=None, n_train=16, n_heldout
 
 
 def _promote(task, program, gate, source, run_id):
-    COMP_DIR.mkdir(parents=True, exist_ok=True)
+    USER_COMP_DIR.mkdir(parents=True, exist_ok=True)
     name = _name(task)
-    path = COMP_DIR / f"{name}.json"
-    old = json.loads(path.read_text()) if path.exists() else None
+    path = USER_COMP_DIR / f"{name}.json"
+    old = load_composites().get(name)
     if old:
-        (COMP_DIR / "history").mkdir(exist_ok=True)
-        (COMP_DIR / "history" / f"{name}_v{old['version']}.json").write_text(json.dumps(old, indent=2))
+        (USER_COMP_DIR / "history").mkdir(exist_ok=True)
+        (USER_COMP_DIR / "history" / f"{name}_v{old['version']}.json").write_text(json.dumps(old, indent=2))
     card = {"name": name, "kind": "composite", "version": (old["version"] + 1) if old else 1,
             "description": f"Verified plan program for: {task.get('prompt') or task['name']}",
             "signature": signature(task), "program": program, "verified_spec": spec_hash(task),
@@ -142,4 +145,4 @@ def _promote(task, program, gate, source, run_id):
                 "version": (old["version"] + 1) if old else 1, "source": "plan_program", "run_id": run_id,
                 "date": time.strftime("%Y-%m-%d"), "written_by": source, "prompt": task.get("prompt")}]}
     path.write_text(json.dumps(card, indent=2))
-    return {"name": name, "version": card["version"], "path": str(path.relative_to(ROOT))}
+    return {"name": name, "version": card["version"], "path": str(rel(path))}

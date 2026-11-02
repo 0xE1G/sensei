@@ -625,10 +625,30 @@ round started by the search (see status).
      stand_up call on an object that already stands knocks it over (the program should check first).
    - Checks: standard tasks 36/36 identical vs the last commit (fixed seeds, success + sim time + labels); smoke 32/32
      (new: lying bottle perceived with its length, truth agrees, feasibility asks for stand_up, stand-in stands it up).
-8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
-   `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
-   skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked
-   `skill_library/`, so local learning and library updates can collide.
+8e. ~~**Base + user skill libraries**~~ done (user decision 2026-10-31; built 2026-11-02):
+   - `skill_library/` (tracked) is the BASE library, read-only at run time; every discovery (new cards and versions,
+     routing evidence, patches, composites) goes to the USER library `user_library/` (git-ignored, same layout;
+     `KINTSUGI_USER_LIBRARY` picks another folder; spawned pool workers inherit it). `skills/library.py`: `load_cards()`
+     merges base then user (user card wins by name), `card_origins()`, `load_merged` / `save_merged` for
+     performance.json / patches.json (merged per (skill, group); the user file stores only entries that differ from the
+     base), `save_card` writes to the user library (previous version, also a base card of that name, into its
+     history/), `rel()` for report paths. Router, composites, explorer, creator, reviser all go through these;
+     `seed_library` and reference/ + primitives/ stay base-only. Trial records' code_hash covers both libraries.
+   - `kintsugi/skill_packs.py` + `scripts/skills.py list | export | import | contribute`: a pack = cards (with their
+     evidence and patches), stand-alone patches, composites (exported only). Import and contribute share one
+     pre-declared re-verification gate: the item's own recorded request (lineage trigger task + region, or task spec +
+     plan program; patch triggers) on fresh dev seeds no earlier gate used (dev start 2000), library WITH vs WITHOUT
+     the item, paired McNemar improve (or hold if >= 80% without), >= 70% with; regression = fixed tasks + every request
+     recorded in the target library (explorer rule). Import judges against this checkout's library and writes passing
+     items into the user library (lineage "imported" + gate; `--no-verify` writes them marked unverified); contribute
+     judges against the BASE library alone, writes passing items into skill_library/ (lineage "contribution" + gate)
+     and removes them from the user library; items without a recorded request are refused (cannot be re-verified).
+   - Server /api/skills: merged cards with "origin" base/user, merged history/evidence/patches; Skills page tags local
+     cards. Existing discoveries were committed earlier, so they are base.
+   - Checks: a rule-backend close_drawer creation with a scratch user library wrote only there (skill_library/
+     untouched); export -> import into an empty user library REJECTED it (fresh seeds 11/16 vs 0/16, p 0.0005 but under
+     70%; its creation gate had 14/16), contribute --dry-run rejected it the same way; pass path: the stand-up card
+     against a base without it 16/16 vs 0/16 (p 1.5e-05), regression pass, files moved with lineage.
 9. **Spark + SAM switch-over**, re-run reported experiments on Meta models, perception gap on ~50 episodes.
 10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
    primitive + particle liquid), video imitation, curriculum, self-proposed tasks.
@@ -639,6 +659,7 @@ pip install -r requirements.txt
 python scripts/fetch_assets.py
 python scripts/fetch_assets.py --scanned             # optional: 33 scanned household objects (~50 MB)
 python scripts/smoke_test.py                       # run after every change
+python scripts/skills.py list                       # base + user library; export / import / contribute packs
 python scripts/run_task.py sort_with_bowl -n 8 --oracle         # the demo task, failures checked by the oracle
 python scripts/prompt_task.py "Put the bowl on the tray." -n 4  # prompt -> task spec (rule backend) -> run
 python scripts/failure_search.py --from-seed --budget 64        # where does the library fail? (random/Optuna/model)
