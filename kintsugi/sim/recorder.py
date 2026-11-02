@@ -14,8 +14,10 @@ GEOM_TYPES = {int(mujoco.mjtGeom.mjGEOM_PLANE): "plane", int(mujoco.mjtGeom.mjGE
               int(mujoco.mjtGeom.mjGEOM_ELLIPSOID): "ellipsoid"}
 
 
-def export_geoms(model) -> dict:
-    """Static description of every visible geom: enough for a browser to rebuild the scene."""
+def export_geoms(model, objects: dict | None = None) -> dict:
+    """Static description of every visible geom: enough for a browser to rebuild the scene. Meshes of imported
+    objects (`objects` = scene.objects) are named "asset:<template>:<mesh>", served by the API per template."""
+    assets = {oid: m["asset"] for oid, m in (objects or {}).items() if m.get("asset")}
     geoms = []
     for g in range(model.ngeom):
         if model.geom_rgba[g, 3] == 0 or model.geom_group[g] > 2:
@@ -31,6 +33,9 @@ def export_geoms(model) -> dict:
                 "quat": model.geom_quat[g].round(5).tolist(), "rgba": rgba.round(3).tolist()}
         if t == "mesh":
             item["mesh"] = model.mesh(model.geom_dataid[g]).name
+            for oid, tpl in assets.items():
+                if item["mesh"].startswith(f"{oid}__"):
+                    item["mesh"] = f"asset:{tpl}:{item['mesh'][len(oid) + 2:]}"
         geoms.append(item)
     return {"bodies": [model.body(b).name for b in range(model.nbody)], "geoms": geoms}
 
@@ -42,7 +47,7 @@ class Recorder:
         self.scene, self.fps = scene, fps
         self.live = live
         if live is not None:
-            live.scene(export_geoms(scene.model), fps)
+            live.scene(export_geoms(scene.model, scene.objects), fps)
         self.poses = poses
         self.video = video
         self.frames, self.pose_frames, self.events = [], [], []
@@ -78,7 +83,7 @@ class Recorder:
         if save_poses and self.pose_frames:
             p = out_dir / f"{stem}_poses.json.gz"
             with gzip.open(p, "wt") as f:
-                json.dump({"fps": self.fps, "scene": export_geoms(self.scene.model), "frames": self.pose_frames,
+                json.dump({"fps": self.fps, "scene": export_geoms(self.scene.model, self.scene.objects), "frames": self.pose_frames,
                            "events": self.events}, f)
             files["poses"] = p.name
         if save_video and self.frames:

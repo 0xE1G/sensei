@@ -22,6 +22,7 @@ export const getSkills = () => api("skills");
 export const getHeadlines = () => api("headlines");
 export const getProgress = () => api("progress");
 export const getMeshes = () => api("meshes");
+export const getAssetMesh = (name) => api(`asset_mesh/${encodeURIComponent(name)}`);
 
 export const pct = (k, n) => (n ? `${Math.round((100 * k) / n)}%` : "–");
 export const fmtP = (p) => (p == null ? "–" : p < 0.001 ? "p < 0.001" : `p = ${p.toPrecision(2)}`);

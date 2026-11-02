@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 
+import mujoco
 import numpy as np
 
 from .camera import Camera
@@ -231,18 +232,66 @@ class Perception:
                 out[k] = meta[k] + (float(pos[2]) if k in ("rim_z", "floor_z") else 0.0)
         if meta.get("articulated"):
             out["parts"] = self._truth_parts(oid)
+        elif meta.get("asset"):
+            mesh = self._truth_mesh(oid)
+            if mesh:
+                out.update(mesh)
         return out
+
+    def _truth_mesh(self, oid) -> dict | None:
+        """An imported mesh object's true descriptor: its body origin is not its centre and its shape is not a
+        primitive, so the true visible surface (area-sampled from the meshes at the true pose, reduced to a
+        top-down height map) goes through the same describe() as perception, without occlusion or depth noise."""
+        m, d = self.scene.model, self.scene.data
+        cache = self.__dict__.setdefault("_mesh_pts", {})
+        b = m.body(oid).id
+        if oid not in cache:
+            rng = np.random.default_rng(0)
+            local = []
+            for g, o in self.lut.items():
+                if o != oid or m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH or m.geom_group[g] > 2:
+                    continue
+                mid = m.geom_dataid[g]
+                v = m.mesh_vert[m.mesh_vertadr[mid]:m.mesh_vertadr[mid] + m.mesh_vertnum[mid]].astype(float)
+                f = m.mesh_face[m.mesh_faceadr[mid]:m.mesh_faceadr[mid] + m.mesh_facenum[mid]]
+                a, b_, c = v[f[:, 0]], v[f[:, 1]], v[f[:, 2]]
+                area = 0.5 * np.linalg.norm(np.cross(b_ - a, c - a), axis=1)
+                if area.sum() <= 0:
+                    continue
+                k = rng.choice(len(f), 30000, p=area / area.sum())
+                u, w = rng.random((2, len(k)))
+                flip = u + w > 1
+                u[flip], w[flip] = 1 - u[flip], 1 - w[flip]
+                pts = a[k] + u[:, None] * (b_[k] - a[k]) + w[:, None] * (c[k] - a[k])
+                # geom frame -> body frame (fixed for a rigid object)
+                Rg = d.geom_xmat[g].reshape(3, 3); Rb = d.xmat[b].reshape(3, 3)
+                local.append((pts @ Rg.T + d.geom_xpos[g] - d.xpos[b]) @ Rb)
+            cache[oid] = np.concatenate(local) if local else None
+        L = cache[oid]
+        if L is None:
+            return None
+        W = L @ d.xmat[b].reshape(3, 3).T + d.xpos[b]
+        cell = np.floor(W[:, :2] / 0.003).astype(np.int64)
+        order = np.lexsort((-W[:, 2], cell[:, 1], cell[:, 0]))      # highest point per 3 mm cell
+        cs = cell[order]
+        first = np.ones(len(cs), bool)
+        first[1:] = np.any(cs[1:] != cs[:-1], axis=1)
+        desc = describe(W[order][first])
+        return desc or None
 
     def _truth_parts(self, oid) -> dict:
         """True front / handle of a moving part (same fields as describe_part): the front faces its local -x."""
         m, d = self.scene.model, self.scene.data
-        f = m.geom(f"{oid}__front").id
+        names = {g: m.geom(g).name or "" for g in range(m.ngeom)}
+        f = next(g for g, n in names.items() if n.startswith(f"{oid}__front"))
         R = d.geom_xmat[f].reshape(3, 3)
         n = -R[:2, 0] / max(np.linalg.norm(R[:2, 0]), 1e-6)
         fc, fs = d.geom_xpos[f], m.geom_size[f]
         front = {"center": [float(v) for v in fc], "tip": [float(v) for v in fc], "normal": [float(n[0]), float(n[1])],
                  "width": float(2 * fs[1]), "height": float(2 * fs[2])}
-        h = m.geom(f"{oid}__handle_post").id
+        hs_ = [g for g, n in names.items() if n.startswith(f"{oid}__handle")]
+        posts = [g for g in hs_ if "post" in names[g]]
+        h = posts[0] if posts else max(hs_, key=lambda g: float(d.geom_xpos[g][:2] @ n))   # the part sticking out most
         hc, hs = d.geom_xpos[h], m.geom_size[h]
         # tip = middle of the post the fingers pinch (what depth perception reports as the outermost points)
         handle = {"center": [float(v) for v in hc], "tip": [float(v) for v in hc], "normal": front["normal"],

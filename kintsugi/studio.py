@@ -102,7 +102,7 @@ def preview(task: dict) -> dict:
     scene = build_scene(task, seed=seeds[0])
     mujoco.mj_forward(scene.model, scene.data)
     d = scene.data
-    return {"fps": 30, "scene": export_geoms(scene.model),
+    return {"fps": 30, "scene": export_geoms(scene.model, scene.objects),
             "frames": [{"t": 0.0, "p": d.xpos.round(4).tolist(), "q": d.xquat.round(4).tolist()}], "events": []}
 
 

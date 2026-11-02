@@ -240,10 +240,26 @@ def open_door(seed=0) -> dict:
             "goal": [{"pred": "joint", "obj": "door", "op": ">=", "value": 50.0}], "constraints": []}
 
 
+def close_drawer(seed=0) -> dict:
+    """The drawer starts fully open; push it closed (at most 1 cm open)."""
+    t = open_drawer(seed)
+    t["objects"][0]["params"]["open"] = 1.0
+    return {**t, "name": "close_drawer", "prompt": "Close the drawer.",
+            "goal": [{"pred": "joint", "obj": "drawer", "op": "<=", "value": 0.01}]}
+
+
+def close_door(seed=0) -> dict:
+    """The door starts open (about 80 degrees); swing it closed (at most 10 degrees open)."""
+    t = open_door(seed)
+    t["objects"][0]["params"]["open"] = 0.85
+    return {**t, "name": "close_door", "prompt": "Close the door.",
+            "goal": [{"pred": "joint", "obj": "door", "op": "<=", "value": 10.0}]}
+
+
 TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bowl_on_tray": bowl_on_tray,
          "cup_on_tray": cup_on_tray, "single_block": single_block, "sort_with_bowl": sort_with_bowl,
          "probe": probe, "stack_by_size": stack_by_size, "slide_plate": slide_plate,
-         "open_drawer": open_drawer, "open_door": open_door}
+         "open_drawer": open_drawer, "open_door": open_door, "close_drawer": close_drawer, "close_door": close_door}
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:

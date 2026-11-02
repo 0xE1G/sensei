@@ -1,0 +1,27 @@
+<!-- Example imported object (MJCF): a small nightstand with one drawer near the top.
+     Conventions: one top-level body; the front faces local -x; geoms named front* / handle* are the parts
+     perception describes; the drawer's joint is named in nightstand.json. -->
+<mujoco model="nightstand">
+  <worldbody>
+    <body name="nightstand">
+      <geom name="bottom" type="box" pos="0 0 0.005" size="0.09 0.12 0.005" rgba="0.45 0.32 0.22 1"/>
+      <geom name="top" type="box" pos="0 0 0.175" size="0.09 0.12 0.005" rgba="0.45 0.32 0.22 1"/>
+      <geom name="left" type="box" pos="0 0.115 0.09" size="0.09 0.005 0.09" rgba="0.45 0.32 0.22 1"/>
+      <geom name="right" type="box" pos="0 -0.115 0.09" size="0.09 0.005 0.09" rgba="0.45 0.32 0.22 1"/>
+      <geom name="back" type="box" pos="0.085 0 0.09" size="0.005 0.12 0.09" rgba="0.45 0.32 0.22 1"/>
+      <geom name="shelf" type="box" pos="0 0 0.095" size="0.09 0.11 0.004" rgba="0.45 0.32 0.22 1"/>
+      <body name="drawer" pos="-0.09 0 0.135">
+        <joint name="drawer_slide" type="slide" axis="-1 0 0" range="0 0.12" limited="true" damping="1.2" armature="0.01"/>
+        <geom name="front" type="box" pos="0 0 0" size="0.006 0.108 0.034" rgba="0.62 0.47 0.33 1" mass="0.08"/>
+        <geom name="floor" type="box" pos="0.08 0 -0.031" size="0.08 0.104 0.003" rgba="0.62 0.47 0.33 1" mass="0.05"/>
+        <geom name="side0" type="box" pos="0.08 0.101 -0.005" size="0.08 0.003 0.026" rgba="0.62 0.47 0.33 1" mass="0.05"/>
+        <geom name="side1" type="box" pos="0.08 -0.101 -0.005" size="0.08 0.003 0.026" rgba="0.62 0.47 0.33 1" mass="0.05"/>
+        <geom name="rear" type="box" pos="0.16 0 -0.005" size="0.003 0.104 0.026" rgba="0.62 0.47 0.33 1" mass="0.05"/>
+        <geom name="handle_arm" type="box" pos="-0.031 0 0.012" size="0.025 0.005 0.005" rgba="0.15 0.15 0.16 1"
+              mass="0.01" friction="1.2 0.005 0.0001" condim="4"/>
+        <geom name="handle_post" type="box" pos="-0.051 0 -0.001" size="0.005 0.005 0.018" rgba="0.15 0.15 0.16 1"
+              mass="0.01" friction="1.2 0.005 0.0001" condim="4"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

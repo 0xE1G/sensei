@@ -132,11 +132,37 @@ ARC_STALL_PARAMS = {
 }
 
 
+
+# Closing: the same part-level motions in the other direction, stopping when the part reaches its closed stop.
+PUSH_IN_CODE = PULL_STALL_CODE.replace("move_linear(n[0], n[1], 0.0, dist=p['max_pull']",
+                                       "move_linear(-n[0], -n[1], 0.0, dist=p['max_pull']")
+# grip the middle of the post when closing: gripping lower puts the palm on the front panel's top edge, which drags
+# the closed drawer out again as the hand lifts away (measured: 4/12 -> 11/12)
+CLOSE_GRIP = {"default": 0.0, "range": [-0.015, 0.03], "meaning": "how far below the handle's centre the fingers pinch (m)"}
+PUSH_IN_PARAMS = {**PULL_STALL_PARAMS, "grip_depth": CLOSE_GRIP,
+                  "max_pull": {"default": 0.18, "range": [0.06, 0.22],
+                               "meaning": "longest push back in along the front's normal (m); stops at the closed stop"}}
+
+ARC_CLOSE_CODE = ARC_STALL_CODE.replace(
+    "    turn = 1.0 if (-sin(a0)) * nx + cos(a0) * ny >= 0 else -1.0\n",
+    "    ox, oy = obj['center']\n"
+    "    turn = 1.0 if (-sin(a0)) * (ox - hx) + cos(a0) * (oy - hy) >= 0 else -1.0\n")
+ARC_CLOSE_PARAMS = {**ARC_STALL_PARAMS,
+                    "angle": {"default": 95.0, "range": [40.0, 120.0],
+                              "meaning": "largest swing back towards the cabinet (deg); stops at the closed stop"}}
+
+
 def stand_in(capability: str) -> dict:
     """propose_primitive output for an opening capability: straight pull, or an arc for doors / hinges. Both are
     written on the part-level motion API and stop at the end stop (the fixed-distance versions above are kept for
     comparison: they overpull short drawers)."""
     arc = any(w in capability.replace("slide", "") for w in ("door", "hinge", "lid", "swing"))
+    if "close" in capability or "shut" in capability:
+        return {"name": "close_arc_push" if arc else "close_straight_push",
+                "code": ARC_CLOSE_CODE if arc else PUSH_IN_CODE, "params": ARC_CLOSE_PARAMS if arc else PUSH_IN_PARAMS,
+                "check": "the moving part closed to the goal amount",
+                "explanation": ("grasp the handle and swing it back around the hinge towards the cabinet until it "
+                                "stops") if arc else "grasp the handle and push the drawer straight back in until it stops"}
     return {"name": "open_arc_pull" if arc else "open_straight_pull", "code": ARC_STALL_CODE if arc else PULL_STALL_CODE,
             "params": ARC_STALL_PARAMS if arc else PULL_STALL_PARAMS,
             "check": "the moving part opened by the goal amount",

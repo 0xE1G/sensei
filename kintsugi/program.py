@@ -17,7 +17,8 @@ import math
 import sys
 
 API_NAMES = ("find", "find_one", "pick", "place", "place_at", "push", "use", "has_skill", "next_best_grasp", "holding", "distance",
-             "left_of", "right_of", "in_front_of", "behind", "say")
+             "left_of", "right_of", "in_front_of", "behind", "say",
+             "place_beside")
 SAFE_BUILTINS = {n: __builtins__[n] if isinstance(__builtins__, dict) else getattr(__builtins__, n) for n in
                  ("len", "range", "sorted", "min", "max", "abs", "sum", "enumerate", "zip", "list", "reversed",
                   "round", "any", "all", "float", "int", "str", "bool", "dict", "tuple", "set", "True", "False",
@@ -214,6 +215,20 @@ def run_program(ep, code: str) -> dict:
             last = ep.records[-1]
         return ok
 
+    def place_beside(target, side):
+        """Put the held object on the table next to `target`: side "left" / "right" / "front" / "behind" (seen from
+        the robot), or a goal name like "left_of"."""
+        from .tasks.planner import RELATIONS, SIDES, relation_spot
+        tid = _id(target)
+        pred = side if side in RELATIONS else SIDES.get(str(side).strip().lower().replace(" ", "_"))
+        if pred is None:
+            raise ProgramError(f"unknown side {side!r}; use left, right, front or behind")
+        tdesc = ep.perc.perceive([tid])[tid]
+        if tdesc is None:
+            raise ProgramError(f"target {tid} is not perceived")
+        held = state["held"]["_desc"] if state["held"] else None
+        return _place(relation_spot(tdesc, held, pred), None, "place")
+
     def place_at(x, y):
         return _place({"center": [float(x), float(y)], "top_z": 0.0, "width": 0.06, "extent_xy": [0.06, 0.06]},
                       None, "place")
@@ -235,18 +250,30 @@ def run_program(ep, code: str) -> dict:
             raise ProgramError(f"missing capability: {capability}")
         if skill is not None and skill not in cands:
             raise ProgramError(f"unknown {capability} skill {skill!r}; library {capability} skills: {cands}")
-        srec = ep.begin(oid, tid)
-        if srec["_desc"] is None:
+        # With recovery on (and no skill forced), a failed attempt is retried on a fresh percept with the next skill
+        # of the same kind, like a failed pick retries with the next grasp.
+        tried = []
+        for attempt in range(1 + (ep.recovery if skill is None else 0)):
+            left = [n for n in cands if n not in tried]
+            if not left:
+                break
+            srec = ep.begin(oid, tid)
+            srec["attempt"] = attempt
+            if srec["_desc"] is None:
+                ep.finish(srec, ep.goal_for(oid))
+                return False
+            name = skill or pick_motion(ep.cards, left, ep.performance, group(srec["_desc"]))
+            tried.append(name)
+            srec["routing"] = {"reason": f"{capability} skill" + (f", recovery attempt {attempt}" if attempt else ""),
+                               "card": name}
+            tdesc = ep.perc.perceive([tid])[tid] if tid else None
+            ep.push(srec, name, tdesc, _params(name, srec["_desc"]))
             ep.finish(srec, ep.goal_for(oid))
-            return False
-        name = skill or pick_motion(ep.cards, cands, ep.performance, group(srec["_desc"]))
-        srec["routing"] = {"reason": "push skill", "card": name}
-        tdesc = ep.perc.perceive([tid])[tid] if tid else None
-        ep.push(srec, name, tdesc, _params(name, srec["_desc"]))
-        ep.finish(srec, ep.goal_for(oid))
-        log.append({"call": "use", "capability": capability, "obj": oid, "target": tid, "skill": name, "ok": bool(srec["ok"]),
-                    "label": srec["label"]})
-        return bool(srec["ok"])
+            log.append({"call": "use", "capability": capability, "obj": oid, "target": tid, "skill": name,
+                        "ok": bool(srec["ok"]), "label": srec["label"], "attempt": attempt})
+            if srec["ok"]:
+                return True
+        return False
 
     def next_best_grasp(obj):
         from .skills.router import route
@@ -262,7 +289,7 @@ def run_program(ep, code: str) -> dict:
     def holding():
         return state["held"] is not None
 
-    api = {"find": find, "find_one": find_one, "pick": pick, "place": place, "place_at": place_at, "use": use,
+    api = {"find": find, "find_one": find_one, "pick": pick, "place": place, "place_at": place_at, "place_beside": place_beside, "use": use,
            "push": lambda obj, target=None, skill=None: use("push", obj, target, skill),
            "has_skill": lambda kind: any(c.get("kind") == kind for c in ep.cards.values()),
            "next_best_grasp": next_best_grasp, "holding": holding,

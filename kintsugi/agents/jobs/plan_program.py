@@ -16,8 +16,11 @@ _SYSTEM, _USER = _TEMPLATE.split("\n---\n", 1)
 
 def _task_view(task):
     """What the model needs: objects (id, kind, colour, role, size parameters), goals, constraints."""
+    from ...sim.templates import ARTICULATED
     return {"objects": [{"id": o["id"], "kind": o["template"], "role": o.get("role", "item"),
-                         "params": o.get("params", {})} for o in task["objects"]],
+                         "params": o.get("params", {}),
+                         **({"moving_part": ARTICULATED[o["template"]]["part"]} if o["template"] in ARTICULATED else {})}
+                        for o in task["objects"]],
             "goal": task["goal"], "constraints": task.get("constraints", []),
             **({"order": task["order"]} if task.get("order") else {})}
 
@@ -44,9 +47,12 @@ def validate(out, inputs) -> list[str]:
     return errs
 
 
+RELATION_SIDES = {"left_of": "left", "right_of": "right", "in_front_of": "front", "behind": "behind"}
+
+
 def rule(inputs) -> dict:
     """Stand-in: one pick/place per goal, ordered so every target that is itself moved is placed first."""
-    goals = [g for g in inputs["task"]["goal"] if g.get("pred") in ("inside", "on")]
+    goals = [g for g in inputs["task"]["goal"] if g.get("pred") in ("inside", "on", *RELATION_SIDES)]
     seq = inputs["task"].get("order") or []
     goals.sort(key=lambda g: seq.index(g["obj"]) if g["obj"] in seq else len(seq))
     items = {g["obj"] for g in goals}
@@ -60,18 +66,22 @@ def rule(inputs) -> dict:
     lines = []
     kinds = {o["id"]: o["template"] for o in inputs["task"]["objects"]}
     for g in inputs["task"]["goal"]:
-        if g.get("pred") == "joint":                    # opening needs a motion, named after what it opens
-            lines += [f'use("open_{kinds.get(g["obj"], "part")}", find_one(id="{g["obj"]}"))']
+        if g.get("pred") == "joint":                    # opening / closing needs a motion, named after the object
+            from ...sim.templates import capability_for
+            verb = "open" if g.get("op", ">=") == ">=" else "close"
+            lines += [f'use("{capability_for(kinds.get(g["obj"], "part"), verb)}", find_one(id="{g["obj"]}"))']
     for g in order:
         if kinds.get(g["obj"]) == "plate":            # no grasp lifts a plate: it needs a motion, not a pick
             lines += [f'use("push", find_one(id="{g["obj"]}"), find_one(id="{g["target"]}"))']
             continue
+        put = (f'    place_beside(find_one(id="{g["target"]}"), "{RELATION_SIDES[g["pred"]]}")'
+               if g["pred"] in RELATION_SIDES else f'    place(find_one(id="{g["target"]}"))')
         lines += [f'obj = find_one(id="{g["obj"]}")',
                   "ok = pick(obj)",
                   "if not ok and next_best_grasp(obj):",
                   "    ok = pick(obj, grasp=next_best_grasp(obj))",
                   "if ok:",
-                  f'    place(find_one(id="{g["target"]}"))',
+                  put,
                   'elif has_skill("push"):',
                   f'    push(obj, find_one(id="{g["target"]}"))']
     return {"program": "\n".join(lines),

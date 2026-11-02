@@ -338,6 +338,47 @@ def meshes():
     return Response(_meshes_payload(), media_type="application/json", headers={"Content-Encoding": "gzip"})
 
 
+@functools.lru_cache(maxsize=64)
+def _asset_mesh_payload(name: str) -> bytes | None:
+    """Visual meshes of one imported object (objects/ or the scanned catalogue), compiled like the scene compiles
+    them so the exported geom offsets match: non-indexed triangles with a colour per corner sampled from the texture."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from kintsugi.sim.assets import _spec, assets
+    a = assets().get(name)
+    if a is None:
+        return None
+    m = _spec(a["path"], a["meta"]).compile()
+    out = {}
+    for g in range(m.ngeom):
+        if m.geom_type[g] != 7 or m.geom_group[g] > 2:            # 7 = mjGEOM_MESH; collision copies are group 3
+            continue
+        i = int(m.geom_dataid[g])
+        v = np.asarray(m.mesh_vert[m.mesh_vertadr[i]:m.mesh_vertadr[i] + m.mesh_vertnum[i]], np.float32)
+        f = np.asarray(m.mesh_face[m.mesh_faceadr[i]:m.mesh_faceadr[i] + m.mesh_facenum[i]])
+        col = np.tile(np.round(255 * m.geom_rgba[g][:3]).astype(np.uint8), (f.size, 1))
+        mat = int(m.geom_matid[g])
+        tex = int(m.mat_texid[mat][1]) if mat >= 0 else -1           # role 1 = RGB
+        if tex >= 0 and m.mesh_texcoordnum[i] > 0:
+            tc = np.asarray(m.mesh_texcoord[m.mesh_texcoordadr[i]:m.mesh_texcoordadr[i] + m.mesh_texcoordnum[i]])
+            ft = np.asarray(m.mesh_facetexcoord[m.mesh_faceadr[i]:m.mesh_faceadr[i] + m.mesh_facenum[i]]).reshape(-1)
+            w, h, c = int(m.tex_width[tex]), int(m.tex_height[tex]), int(m.tex_nchannel[tex])
+            img = np.asarray(m.tex_data[m.tex_adr[tex]:m.tex_adr[tex] + w * h * c]).reshape(h, w, c)[:, :, :3]
+            uv = tc[ft] % 1.0
+            col = img[np.clip((uv[:, 1] * h).astype(int), 0, h - 1), np.clip((uv[:, 0] * w).astype(int), 0, w - 1)]
+        out[m.mesh(i).name] = {"v": base64.b64encode(v[f.reshape(-1)].tobytes()).decode(),
+                               "c": base64.b64encode(np.ascontiguousarray(col, np.uint8).tobytes()).decode()}
+    return gzip.compress(json.dumps(out).encode())
+
+
+@app.get("/api/asset_mesh/{name}")
+def asset_mesh(name: str):
+    data = _asset_mesh_payload(name)
+    if data is None:
+        raise HTTPException(404, f"no imported object '{name}'")
+    return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip"})
+
+
 # ---------------------------------------------------------------- built web app
 # ----------------------------------------------------------------------------- studio (prompt -> run -> repair)
 # The only part of the server that starts work: one job at a time, in its own process (scripts/studio_job.py).

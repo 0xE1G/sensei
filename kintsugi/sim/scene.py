@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import mujoco
 import numpy as np
 
-from .templates import ObjectSpec, add_object, resolve_params
+from .templates import ARTICULATED, ASSET_TEMPLATES, ObjectSpec, add_object, resolve_params
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PANDA_XML = ROOT / "assets" / "franka_emika_panda" / "panda.xml"
@@ -108,6 +108,9 @@ def _footprint(o) -> float:
         return p["radius"] + 0.01
     if o.template == "bar":
         return 0.5 * math.hypot(p["length"], p["width"])
+    if o.template in ASSET_TEMPLATES:
+        from .assets import assets
+        return assets()[o.template]["footprint"] + (0.06 if o.template in ARTICULATED else 0.01)
     if o.template in ("drawer", "door"):
         # the cabinet plus the space in front of it the drawer / door needs when it opens
         return 0.5 * math.hypot(p["width"], p["depth"]) + 0.06
@@ -125,7 +128,7 @@ def _sample_once(objs, rng, max_tries=400, fixed=None):
             continue
         rad = _footprint(o)
         gap = 0.05 if o.role == "target" else 0.035
-        cabinet = o.template in ("drawer", "door")
+        cabinet = o.template in ARTICULATED          # fixed cabinets (built-in or imported) with a moving part
         for _ in range(max_tries):
             # cabinets stand at the back of the reachable area so the opened drawer / door stays reachable
             x = rng.uniform(0.6, 0.67) if cabinet else rng.uniform(*REACH["x"])
@@ -190,6 +193,10 @@ def build_scene(task: dict, seed: int = 0, positions: dict | None = None, pertur
     model = spec.compile()
     data = mujoco.MjData(model)
     _set_home(model, data)
+    for meta in metas.values():                      # moving parts that start open (template param "open")
+        art = meta.get("articulated")
+        if art and art.get("initial"):
+            data.qpos[model.jnt_qposadr[model.joint(art["joint"]).id]] = art["initial"]
     _strengthen_gripper(model)
     _stiffen_contacts(model)
     mujoco.mj_forward(model, data)

@@ -10,6 +10,7 @@ CONTAINERS_INSIDE = {"bowl", "cup", "bin"}
 SURFACES_ON = {"tray", "zone"}
 STACKABLE = {"block", "bar", "cylinder"}      # "on" another object = stacking
 CONSTRAINTS = ("not_disturbed", "stays_upright")
+RELATION_PREDS = ("left_of", "right_of", "in_front_of", "behind")    # seen from the robot
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 
 SCHEMA = {
@@ -32,7 +33,8 @@ SCHEMA = {
                                    "params": {"type": "object"}, "fixed": {"type": "boolean"}}}},
                 "goal": {"type": "array", "items": {
                     "type": "object", "required": ["pred", "obj"],
-                    "properties": {"pred": {"enum": ["inside", "on", "joint", "distance", "height", "upright"]},
+                    "properties": {"pred": {"enum": ["inside", "on", "joint", "distance", "height", "upright",
+                                                     "left_of", "right_of", "in_front_of", "behind"]},
                                    "obj": {"type": "string"}, "target": {"type": "string"},
                                    "upright": {"type": "boolean"}, "part": {"type": "string"},
                                    "op": {"enum": [">=", "<="]}, "value": {"type": "number"}}}},
@@ -48,9 +50,17 @@ SCHEMA = {
 
 def catalog_text() -> str:
     lines = []
+    from ...sim.assets import assets
     for t in sorted(DEFAULTS):
         rng = ", ".join(f"{k} {lo}-{hi}" for k, (lo, hi) in RANGES[t].items())
-        lines.append(f"- {t}: {rng}")
+        extra = ""
+        if t in assets():                          # an imported model: fixed size, described by its file
+            a = assets()[t]
+            extra = (f" (imported model, {100 * a['width']:.0f} x {100 * a['height']:.0f} cm"
+                     + (f", {DEFAULTS[t]['color']} (fixed by its texture)" if DEFAULTS[t].get("color") else "")
+                     + (f", moving part '{ARTICULATED[t]['part']}'" if t in ARTICULATED else "")
+                     + (f": {a['meta']['description']}" if a["meta"].get("description") else "") + ")")
+        lines.append(f"- {t}: {rng}{extra}")
     lines.append(f"Colours: {', '.join(sorted(COLORS))}.")
     return "\n".join(lines)
 
@@ -96,6 +106,10 @@ def validate(out, inputs) -> list[str]:
         for k in ("obj", "target"):
             if k in g and g[k] not in by_id:
                 errs.append(f"goal refers to unknown object '{g[k]}'")
+        if g["pred"] in RELATION_PREDS and "target" not in g:
+            errs.append(f"goal '{g['pred']}' for {g['obj']} needs a target (the object it goes beside)")
+        if g["pred"] in RELATION_PREDS and by_id.get(g["obj"], {}).get("role", "item") != "item":
+            errs.append(f"goal object '{g['obj']}' must have role item")
         if g["pred"] in ("inside", "on") and "target" not in g:
             errs.append(f"goal '{g['pred']}' for {g['obj']} needs a target")
         if g["pred"] in ("inside", "on") and g["obj"] in by_id and g.get("target") in by_id:
@@ -108,7 +122,7 @@ def validate(out, inputs) -> list[str]:
                 errs.append(f"goal object '{g['obj']}' must have role item")
         goal_objs.append(g["obj"])
     items = [o["id"] for o in t["objects"] if o.get("role", "item") == "item"]
-    stack_bases = {g["target"] for g in t["goal"] if "target" in g}
+    stack_bases = {g["target"] for g in t["goal"] if "target" in g and g["pred"] in ("inside", "on")}
     for i in items:
         n = goal_objs.count(i)
         if n > 1 or (n == 0 and i not in stack_bases):
@@ -152,9 +166,10 @@ def _check_term(g, by_id) -> list[str]:
             return [f"'{g['obj']}' ({o['template']}) has no moving part; 'joint' goals need one of {sorted(ARTICULATED)}"]
         if g.get("part", art["part"]) != art["part"]:
             errs.append(f"{g['obj']} has moving part '{art['part']}', not '{g.get('part')}'")
-        hi = (RANGES[o["template"]]["travel"][1] if art["unit"] == "m" else 105.0)
-        if not 0 < g["value"] <= hi:
-            errs.append(f"joint value for {g['obj']} must be in (0, {hi}] {art['unit']}")
+        hi = art.get("max") or (RANGES[o["template"]]["travel"][1] if art["unit"] == "m" else 105.0)
+        lo_ok = g["value"] >= 0 if g["op"] == "<=" else g["value"] > 0
+        if not (lo_ok and g["value"] <= hi):
+            errs.append(f"joint value for {g['obj']} must be in (0, {hi}] {art['unit']} (0 allowed for '<=')")
     if g["pred"] == "distance" and "target" not in g:
         errs.append(f"goal 'distance' for {g['obj']} needs a target")
     if g["pred"] in ("distance", "height") and not 0 <= g["value"] <= 0.6:
@@ -189,10 +204,13 @@ def rule(inputs) -> dict:
         if re.search(pat, p):
             return {"status": "refuse", "reason": reason}
     has = lambda *ws: all(re.search(rf"\b{w}", p) for w in ws)
-    if has("open") and (has("drawer") or has("door")):
-        task = specs.open_drawer(seed=0) if has("drawer") else specs.open_door(seed=0)
+    if (has("open") or has("close") or has("shut")) and (has("drawer") or has("door")):
+        closing = has("close") or has("shut")
+        task = {(False, True): specs.open_drawer, (False, False): specs.open_door,
+                (True, True): specs.close_drawer, (True, False): specs.close_door}[(closing, has("drawer"))](seed=0)
         return {"status": "ok", "task": {"name": task["name"], "prompt": inputs["prompt"], "objects": [
-            {"id": o["id"], "template": o["template"], "role": o.get("role", "item"), "params": {}} for o in task["objects"]],
+            {"id": o["id"], "template": o["template"], "role": o.get("role", "item"),
+             "params": {k: v for k, v in o["params"].items() if k == "open"}} for o in task["objects"]],
             "goal": task["goal"], "constraints": []}}
     if has("stack") and has("block"):
         task = specs.stack_by_size(seed=0)

@@ -300,6 +300,11 @@ class Episode:
                             ok = self.grasp(srec, name, step.get("params"))
                         elif name == "lift":
                             ok = self.lift(srec, step.get("params"))
+                        elif name == "place_in" and st.get("relation"):
+                            from .tasks.planner import relation_spot
+                            td = self.perc.perceive([st["target"]])[st["target"]]
+                            ok = td is not None and self.place(srec, relation_spot(td, srec["_desc"], st["relation"]),
+                                                               step.get("params"), "place", (0.0, 0.0))
                         elif name == "place_in":
                             ok = self.place(srec, self.target_desc(st["target"]), step.get("params"),
                                             step.get("mode", "place"), step.get("slot", (0.0, 0.0)))

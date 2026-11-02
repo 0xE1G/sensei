@@ -244,6 +244,8 @@ function measureText(g, objects) {
   }
   if (g.pred === "distance") return `${g.op === "<=" ? "within" : "at least"} ${Math.round(g.value * 100)} cm of ${nice(g.target)}`;
   if (g.pred === "height") return `bottom ${op} ${Math.round(g.value * 100)} cm above the table`;
+  const REL = { left_of: "left of", right_of: "right of", in_front_of: "in front of", behind: "behind" };
+  if (REL[g.pred]) return `${REL[g.pred]} ${nice(g.target)}`;
   return nice(g.pred);
 }
 

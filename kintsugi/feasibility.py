@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 
 from .skills.library import OPEN_WIDTH
+from .sim.templates import capability_for
 from .tasks.planner import fits, grasp_preference
 
 SURFACES = {"tray", "zone"}            # targets an object can be slid onto
@@ -54,7 +55,8 @@ def assess(task: dict, percepts: dict, cards: dict, allowed=None) -> list[dict]:
             out.append({**v, "verdict": "unreachable", "reason": f"{100 * r:.0f} cm from the base, outside the arm's reach"})
             continue
         if pred in ("joint", "distance", "height", "upright"):
-            kind = f"open_{templates[obj]}" if pred == "joint" and g.get("op", ">=") == ">=" else None
+            kind = (capability_for(templates[obj], "open" if g.get("op", ">=") == ">=" else "close")
+                    if pred == "joint" else None)
             have = motion_cards(cards, kind) if kind else []
             out.append({**v, "verdict": "motion" if have else "missing", "capability": kind, "skills": have,
                         "reason": (f"moves its part with {have[0]}" if have else

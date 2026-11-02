@@ -31,8 +31,10 @@ def reference_motions() -> dict:
                 "params": prop["params"], "check": prop["check"], "source": "reference (hand-written)"}
     cards = {"reference_push": card("push", _push_rule({}))}
     for t, a in ARTICULATED.items():
-        kind = f"open_{t}"
-        cards[f"reference_{kind}"] = card(kind, stand_in("hinge" if a["type"] == "hinge" else "pull"))
+        for verb in ("open", "close"):
+            kind = f"{verb}_{a['part']}"
+            mode = ("hinge" if a["type"] == "hinge" else "pull") + ("_close" if verb == "close" else "")
+            cards[f"reference_{kind}"] = card(kind, stand_in(mode))
     return cards
 
 

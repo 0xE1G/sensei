@@ -129,6 +129,17 @@ class Monitor:
             res.append({**c, "ok": bool(ok)})
         return res
 
+    # direction from the target for each relation, seen from the robot (+x away from it, +y to its left)
+    RELATIONS = {"left_of": (0.0, 1.0), "right_of": (0.0, -1.0), "in_front_of": (-1.0, 0.0), "behind": (1.0, 0.0)}
+
+    def relation(self, obj, target, pred) -> tuple[bool, float]:
+        """obj beside target on that side: 4-30 cm further that way (centre to centre), within 10 cm sideways."""
+        u = np.array(self.RELATIONS[pred])
+        d = self.pos(obj)[:2] - self.pos(target)[:2]
+        along = float(d @ u)
+        perp = float(np.linalg.norm(d - along * u))
+        return bool(0.04 <= along <= 0.30 and perp <= 0.10), along
+
     def check_goal(self, goal) -> list[dict]:
         """Goals are deterministic checks on simulator state. on / inside / upright as before, plus composable
         measurable terms, each compared with op (">=" or "<=") against value:
@@ -144,6 +155,8 @@ class Monitor:
                     ok = self.upright(g["obj"])
             elif g["pred"] == "upright":
                 ok = self.upright(g["obj"])
+            elif g["pred"] in self.RELATIONS:
+                ok, measured = self.relation(g["obj"], g["target"], g["pred"])
             elif g["pred"] in ("joint", "distance", "height"):
                 if g["pred"] == "joint":
                     measured = self.joint_value(g["obj"], g.get("part"))

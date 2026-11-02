@@ -38,11 +38,32 @@ CAPABILITIES = {
                   "description": "swing a hinged door open: grasp its handle and pull it along the arc around the "
                                  "hinge (a vertical axis at one side edge of the front)",
                   "program": "use('open_door', find_one(id='{obj}'))"},
+    "close_drawer": {"kind": "close_drawer",
+                     "description": "push an open drawer closed: slide it back in along the front's inward normal "
+                                    "(against the outward normal) until it stops",
+                     "program": "use('close_drawer', find_one(id='{obj}'))"},
+    "close_door": {"kind": "close_door",
+                   "description": "swing an open hinged door closed: move its handle along the arc around the hinge back "
+                                  "towards the cabinet until it stops",
+                   "program": "use('close_door', find_one(id='{obj}'))"},
     "push": {"kind": "push",
              "description": "move an object along the table to a target location without grasping it (the object "
                             "cannot be grasped: no grasp in the library fits it)",
              "program": "push(find_one(id='{obj}'), find_one(id='{target}'))"},
 }
+
+
+def _part_capability(capability):
+    """open_<part> / close_<part> for a moving part known from an imported model: described by its joint type."""
+    from .sim.templates import ARTICULATED
+    verb, _, part = capability.partition("_")
+    typ = next((a["type"] for a in ARTICULATED.values() if a["part"] == part), None)
+    if verb not in ("open", "close") or typ is None:
+        return None
+    how = ("slide it along the front's normal (out to open, back in to close) until it stops" if typ == "slide" else
+           "swing it around its hinge, a vertical axis at one side edge of the front, until it stops")
+    return {"kind": capability, "description": f"{verb} the {part}: grasp its handle and {how}",
+            "program": f"use('{capability}', find_one(id='{{obj}}'))"}
 
 
 def _log(msg):
@@ -58,7 +79,7 @@ class SkillCreator:
         from .agents.llm import ModelClient
         self.task_spec = ({k: v for k, v in task_spec.items() if k not in ("program", "program_source")}
                           if task_spec else None)
-        self.cap = CAPABILITIES.get(capability) or {
+        self.cap = CAPABILITIES.get(capability) or _part_capability(capability) or {
             "kind": capability, "description": description or (
                 "move the object as the request asks, without the library's grasp/place skills "
                 f"(request: {(self.task_spec or {}).get('prompt') or task_name!r})")}

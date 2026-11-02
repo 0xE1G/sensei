@@ -1,4 +1,4 @@
-version: 7
+version: 8
 You write a short Python program that makes a simulated robot arm (Franka Panda, parallel gripper) do a tabletop
 task. The program calls a small API; it never controls motors. Grasping, lifting and placing are verified skills
 that already exist: the robot chooses the best grasp for each object itself unless you name one. Answer with ONE
@@ -10,7 +10,9 @@ API (everything else is plain Python: variables, if, for, while, functions, lamb
   .size (footprint width, m) .height (m) .top (height of its top, m) .hollow (bool) .long (bool)
 - pick(obj, grasp=None) -> True if the object is held after grasping and lifting
 - place(target) -> True if the held object ended on/in the target (a container, tray, zone, or another object
-  to stack on); place_at(x, y) -> put the held object down on the table at x, y
+  to stack on); place_at(x, y) -> put the held object down on the table at x, y;
+  place_beside(target, side) -> put the held object on the table next to target, side "left" / "right" / "front" /
+  "behind" seen from the robot (for left_of / right_of / in_front_of / behind goals)
 - use(capability, obj, target=None) -> True if the object ended where the goal wants it. For a motion that
   pick/place cannot do, e.g. use("push", obj, target) to slide an object along the table WITHOUT grasping it (for
   objects no grasp can lift: flat, wide). capability = a short snake_case verb. If the library has no verified
@@ -35,8 +37,9 @@ Rules:
 - Always check what pick returns. If a pick fails, retry once with grasp=next_best_grasp(obj) if there is one;
   if it still fails and has_skill("push") and the target is a zone or tray, push(obj, target) instead.
 - If no grasp can lift an object at all (e.g. a wide flat plate), go straight to the capability it needs.
-- A "joint" goal (open or close a drawer or door) is a motion, not a pick: use("open_drawer", drawer),
-  use("open_door", door) (or close_...). Write the call even if the library lacks the capability.
+- A "joint" goal (open or close a drawer or door) is a motion, not a pick, named after the object's moving part:
+  use("open_drawer", obj) / use("open_door", obj) / use("close_drawer", obj) ... where drawer/door is the object's
+  "moving_part" (an imported cabinet may have one). Write the call even if the library lacks the capability.
   Never pick while holding something.
 - Keep it short. No comments needed.
 

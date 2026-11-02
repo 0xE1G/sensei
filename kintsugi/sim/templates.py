@@ -40,9 +40,9 @@ RANGES = {
     "zone":     {"width": (0.08, 0.25), "depth": (0.08, 0.25)},
     # Objects with a moving part (a fixed cabinet + a part on a joint). Their front faces the robot.
     "drawer":   {"width": (0.16, 0.26), "depth": (0.14, 0.20), "height": (0.08, 0.12), "travel": (0.08, 0.15),
-                 "damping": (0.5, 3.0)},
+                 "damping": (0.5, 3.0), "open": (0.0, 1.0)},
     "door":     {"width": (0.12, 0.20), "depth": (0.12, 0.18), "height": (0.10, 0.16), "hinge_side": (0.0, 1.0),
-                 "damping": (0.02, 0.2)},
+                 "damping": (0.02, 0.2), "open": (0.0, 1.0)},
 }
 
 DEFAULTS = {
@@ -59,8 +59,10 @@ DEFAULTS = {
     "bin": {"width": 0.20, "depth": 0.16, "wall_height": 0.06, "color": "brown"},
     "tray": {"width": 0.20, "depth": 0.16, "color": "gray"},
     "zone": {"width": 0.14, "depth": 0.14, "color": "red"},
-    "drawer": {"width": 0.20, "depth": 0.16, "height": 0.10, "travel": 0.13, "damping": 1.5, "color": "white"},
-    "door": {"width": 0.16, "depth": 0.15, "height": 0.13, "hinge_side": 1.0, "damping": 0.08, "color": "white"},
+    "drawer": {"width": 0.20, "depth": 0.16, "height": 0.10, "travel": 0.13, "damping": 1.5, "open": 0.0,
+               "color": "white"},
+    "door": {"width": 0.16, "depth": 0.15, "height": 0.13, "hinge_side": 1.0, "damping": 0.08, "open": 0.0,
+             "color": "white"},
 }
 
 # Moving part per articulated template: joint type and the unit a goal on it uses (m for slides, deg for hinges).
@@ -69,6 +71,41 @@ ARTICULATED = {"drawer": {"part": "drawer", "type": "slide", "unit": "m"},
 
 # Templates that are containers or targets default to fixed to the table.
 FIXED_BY_DEFAULT = {"bin", "tray", "zone", "drawer", "door"}
+
+
+def _register_assets():
+    """Models dropped into objects/ (kintsugi.sim.assets) become templates: no parameters except "open" for a moving
+    part; size, parts and joint come from the file."""
+    from .assets import assets
+    out = set()
+    for name, a in assets().items():
+        if name in DEFAULTS:
+            print(f"[assets] {name}: a built-in template has this name; file ignored")
+            continue
+        j = a.get("joint")
+        DEFAULTS[name] = {"open": 0.0} if j else {}
+        RANGES[name] = {"open": (0.0, 1.0)} if j else {}
+        if not j:                                    # loose objects: mass and friction like the built-ins
+            mass = float(a["meta"].get("mass") or a["mass"])
+            DEFAULTS[name].update(mass=mass, friction=1.0)
+            RANGES[name].update(mass=(round(0.3 * mass, 4), round(3 * mass, 4)), friction=(0.2, 1.5))
+        if a.get("color"):
+            DEFAULTS[name]["color"] = a["color"]
+        if j:
+            ARTICULATED[name] = {"part": j["part"], "type": j["type"], "unit": j["unit"], "max": j["max"]}
+        if j or a["meta"].get("fixed"):
+            FIXED_BY_DEFAULT.add(name)
+        out.add(name)
+    return out
+
+
+ASSET_TEMPLATES = _register_assets()
+
+
+def capability_for(template: str, verb: str) -> str:
+    """Opening / closing skills are named after the moving PART (a feature), not the object: an imported cabinet
+    with a drawer uses the same open_drawer skills as the built-in drawer."""
+    return f"{verb}_{ARTICULATED.get(template, {}).get('part', template)}"
 
 OBJ_FRICTION = lambda f: [float(f), 0.005, 0.0001]
 
@@ -185,7 +222,9 @@ def _add_articulated(body, oid, t, p, rgba):
     return {"height": H, "width": max(W, D), "hollow": False, "bottom_offset": 0.0, "half_x": D / 2,
             "half_y": W / 2, "rim_z": H, "floor_z": tk,
             "articulated": {"part": a["part"], "joint": f"{oid}__{a['part']}", "type": a["type"], "unit": a["unit"],
-                            "range": rng_, "body": f"{oid}__{a['part']}"}}
+                            "range": rng_, "body": f"{oid}__{a['part']}",
+                            # starts this far open (fraction of the travel; a door at most ~95 deg)
+                            "initial": float(p.get("open", 0.0)) * (rng_[1] if t == "drawer" else 1.65)}}
 
 
 def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> dict:
@@ -278,6 +317,10 @@ def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> d
             body.add_geom(name=f"{obj.id}_lip{i}", type=G.mjGEOM_BOX, size=[sx, sy, lip / 2],
                           pos=[px, py, lip / 2], rgba=rgba)
         meta.update(height=lip, width=max(w, d), hollow=False, half_x=w / 2, half_y=d / 2, rim_z=lip, floor_z=t_)
+    elif t in ASSET_TEMPLATES:
+        from .assets import add_asset
+        meta.update(add_asset(body, obj.id, t, p))
+        meta["color"] = DEFAULTS[t].get("color", meta["color"])   # the texture decides; a colour param cannot repaint it
     elif t in ARTICULATED:
         meta.update(_add_articulated(body, obj.id, t, p, rgba))
     elif t == "zone":

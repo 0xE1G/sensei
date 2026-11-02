@@ -521,6 +521,58 @@ round started by the search (see status).
      normal drawers old 16/16, now 16/16; 9 cm old 1/16, now 16/16; 8.5 cm (never seen, 5 mm margin) old 1/16, now
      11/16. Smoke 25/25 (drawer check uses a 9 cm drawer).
    - Note: skill_library/open_drawer.json (learned in a Studio run) and open_drawer_stall_detect.json are untracked.
+8j. **Generality: objects from files, closing, relational goals, motion-skill retry (2026-11-01)**:
+   - Importer (`kintsugi/sim/assets.py`): any MJCF `.xml` / URDF `.urdf` dropped into `objects/` becomes a template
+     (one top-level body; optional `<name>.json`: description, fixed, hollow, articulated {part, joint}, part-name
+     prefixes). Size comes from the compiled model's geometry; attached under the object's body with names prefixed
+     `<id>__`, so perception (descendants), part detection (geoms `front*` / `handle*`), monitor joints and the oracle
+     (`_truth_parts` now generic) work unchanged. Articulated models are placed like cabinets (front = local -x faces
+     the robot). The task_spec catalogue lists them with size, moving part and description. Samples:
+     `objects/nightstand.xml` (drawer near the top) and `objects/soap_bottle.urdf`. Results: soap bottle perceived
+     2.3 mm off, fixed plan 8/8 (centre_grasp), oracle 8/8; nightstand opened 8/8 by the library's
+     open_drawer_stall_detect (never saw a nightstand), oracle 8/8.
+   - Opening/closing skills are named after the moving PART (`capability_for(template, verb)`: open_drawer,
+     close_door), not the object, so imported cabinets reuse library skills; built-in names unchanged.
+   - Closing: drawer/door templates take `open` (0-1, default 0 = closed: every existing scene unchanged); scene build
+     sets the joint after compiling. Joint goals with op "<=" (0 allowed) -> capability close_<part>; tasks
+     close_drawer (<= 1 cm) / close_door (<= 10 deg); task_spec prompt v7 (start open + close), plan prompt v8
+     (moving_part in the task view). Stand-ins/oracle: grasp handle, move_linear back in / move_arc towards the
+     cabinet until stall; closing grips the middle of the post (gripping lower put the palm on the panel's top edge
+     and dragged the drawer out again on lift: 4/12 -> 11/12). Doors 9/12 at defaults; oracle drawers 12/12.
+     create_skill close_drawer (rule backend, dry run): held-out 14/16 vs 0/16 (p 6.1e-05), regression pass.
+   - Relational goals left_of / right_of / in_front_of / behind (seen from the robot; monitor: 4-30 cm that way centre
+     to centre, <= 10 cm sideways); `planner.relation_spot` (beside the target from perception), fixed plan places
+     there; program API `place_beside(target, side)`; task_spec v8. Block left of / in front of a bowl: fixed plan
+     8/8, rule program 8/8, oracle 8/8.
+   - use() with recovery on retries with the next skill of the same kind (like picks). 8.5 cm drawers: 11/16 both ways
+     (5 episodes retried; the other drawer skill fails the same way there).
+   - Not done: righting tipped objects (needs reorienting a held object: the same missing motion as pouring),
+     investigator for model-written skills (revisions send evidence straight to the model).
+   - Checks: standard tasks 36/36 identical vs last commit; smoke 29/29 (new: imported objects, relational goal;
+     scenes whose moving part starts open are not centre-compared: the swung-out door is part of the object).
+8k. **Scanned household objects (2026-11-02)**: `objects/scanned_objects.json` = curated catalogue of 33 Google Scanned
+   Objects (CC-BY 4.0 meshes/textures; MJCF from kevinzakka/mujoco_scanned_objects, MIT): mugs, ramekins, bowls, plant
+   pots, plates, figures, bottles, jars, tools, a mouse, tape, a basket and a bin; key = template name, plus folder,
+   description, mass (scans have none), hollow, color (named by hand; median texel otherwise). `python
+   scripts/fetch_assets.py --scanned` downloads only the files each model.xml references (raw URLs, ~1.4 MB per object,
+   ~50 MB) into git-ignored `assets/scanned_objects/`; the importer (`sim/assets.py`) registers every downloaded entry, so
+   a checkout without the download is unchanged. Importer fixes: asset file paths made absolute (needed after
+   attaching), visual-only geoms massless, collision density scaled to the catalogue mass (also under mass perturbation),
+   friction param + condim 4 like the built-ins, size from mesh vertices (a rotated mesh box was 30-80% too large),
+   `fusestatic` off (compiling a URDF merged its joint-less body into the world and lost every geom), colour fixed by
+   the texture (a colour param cannot repaint it; the task_spec catalogue says so). Ground truth for mesh objects
+   (`Perception._truth_mesh`): area-sampled true surface -> top-down height map -> the same describe() (the body origin
+   is not the centre; old truth was up to 9 cm off). Web: exported geoms name imported meshes "asset:<template>:<mesh>",
+   `/api/asset_mesh/<template>` serves non-indexed triangles with texture colour per corner, the viewer loads them with
+   vertex colours (checked in Episodes). Dropped after a look: stacking cups and Jenga (towers > 29 cm), allosaurus
+   (perception and truth disagree by 10 cm).
+   **Unseen-object benchmark** `scripts/scanned_benchmark.py [-n 8] [--library seed|current]` (each object alone onto a
+   tray, oracle on): current library 125/240, expert solves 214/240 (runs/20261102-014634_scanned_bench). 8/8: mug_blue,
+   mug_beaded, both small ramekins, bowl_black, bowl_footed, plant cup/pot, soap dish, Mario, screwdriver, pill bottle.
+   0/8 but solvable: plates/saucer (missed_grasp), crayon box, gum box, lotion bottle, honey dipper (collision: tall
+   narrow or thin objects), scissors and mouse (weak grasp/slip), tape roll; partial: dog bowl 1/8 (slip), android 2/8,
+   bowl_cereal 4/8, mug_ace 4/8. Perception centre error 1-6 mm (crayon box 13 mm). These are the next repair targets
+   (`auto_repair.py` on the benchmark runs); none has been repaired yet. Smoke check added (skipped without the download).
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked
@@ -533,6 +585,7 @@ round started by the search (see status).
 ```
 pip install -r requirements.txt
 python scripts/fetch_assets.py
+python scripts/fetch_assets.py --scanned             # optional: 33 scanned household objects (~50 MB)
 python scripts/smoke_test.py                       # run after every change
 python scripts/run_task.py sort_with_bowl -n 8 --oracle         # the demo task, failures checked by the oracle
 python scripts/prompt_task.py "Put the bowl on the tray." -n 4  # prompt -> task spec (rule backend) -> run

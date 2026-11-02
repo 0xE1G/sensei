@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { getMeshes } from "./api.js";
+import { getAssetMesh, getMeshes } from "./api.js";
 
 
 
@@ -23,6 +23,43 @@ export async function loadMeshGeometries() {
   }
   meshGeoms = out;
   return out;
+}
+
+// Imported objects (objects/, scanned catalogue): geoms name their mesh "asset:<template>:<mesh>"; each template's
+// visual meshes are fetched once (non-indexed triangles + texture colour per corner).
+const assetGeoms = {};
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)).buffer;
+function loadAssetMeshes(name) {
+  if (!assetGeoms[name]) {
+    assetGeoms[name] = getAssetMesh(name).then((raw) => {
+      const out = {};
+      for (const [mesh, m] of Object.entries(raw)) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(b64(m.v)), 3));
+        g.setAttribute("color", new THREE.BufferAttribute(new Uint8Array(b64(m.c)), 3, true));
+        g.computeVertexNormals();
+        out[`asset:${name}:${mesh}`] = g;
+      }
+      return out;
+    }).catch(() => ({}));
+  }
+  return assetGeoms[name];
+}
+
+function useAssetMeshes(scene, meshes) {
+  const [extra, setExtra] = useState({});
+  const names = useMemo(() => [...new Set((scene?.geoms || [])
+    .filter((g) => g.type === "mesh" && String(g.mesh).startsWith("asset:"))
+    .map((g) => g.mesh.split(":")[1]))].sort().join("|"), [scene]);
+  useEffect(() => {
+    if (!names) return;
+    let live = true;
+    Promise.all(names.split("|").map(loadAssetMeshes)).then((parts) => {
+      if (live) setExtra(Object.assign({}, ...parts));
+    });
+    return () => { live = false; };
+  }, [names]);
+  return useMemo(() => (meshes && names ? { ...meshes, ...extra } : meshes), [meshes, extra, names]);
 }
 
 const mjQuat = (q) => new THREE.Quaternion(q[1], q[2], q[3], q[0]); // MuJoCo is w-first
@@ -95,8 +132,9 @@ function SceneObjects({ scene, meshes, pose }) {
           const geo = geomGeometry(g, meshes);
           if (!geo) return null;
           const plane = false;
+          const vc = !!geo.getAttribute?.("color");      // imported meshes carry texture colours per vertex
           const mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(g.rgba[0], g.rgba[1], g.rgba[2]),
+            color: vc ? new THREE.Color(1, 1, 1) : new THREE.Color(g.rgba[0], g.rgba[1], g.rgba[2]), vertexColors: vc,
             transparent: g.rgba[3] < 1, opacity: g.rgba[3], roughness: plane ? 0.95 : 0.55, metalness: 0.05,
           });
           return { key: `${b}-${i}`, geo, mat, pos: g.pos, quat: mjQuat(g.quat), plane };
@@ -217,7 +255,8 @@ function RobotCameras({ scene: desc, pose, show }) {
 
 // zoom=false: the mouse wheel scrolls the page instead of zooming (rotate and pan still work).
 // cameras: show the robot camera tiles (toggle in the corner).
-export function Viewer({ scene, meshes, pose, height = 520, zoom = true, cameras = true, children }) {
+export function Viewer({ scene, meshes: robotMeshes, pose, height = 520, zoom = true, cameras = true, children }) {
+  const meshes = useAssetMeshes(scene, robotMeshes);
   const [showCams, setShowCams] = useState(cameras);
   const box = useRef(null);
   const [width, setWidth] = useState(800);

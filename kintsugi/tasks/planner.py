@@ -49,6 +49,24 @@ def choose_grasp(desc: dict, allowed: list[str], cards: dict, performance=None) 
     return route(fitting, desc, performance or {})
 
 
+RELATIONS = {"left_of": (0.0, 1.0), "right_of": (0.0, -1.0), "in_front_of": (-1.0, 0.0), "behind": (1.0, 0.0)}
+SIDES = {"left": "left_of", "right": "right_of", "front": "in_front_of", "in_front": "in_front_of", "behind": "behind",
+         "back": "behind"}
+
+
+def relation_spot(target_desc: dict, obj_desc: dict | None, pred: str, gap: float = 0.04) -> dict:
+    """A place-target descriptor on the table beside `target_desc` on that side (from perception only): the target's
+    half extent + the object's half width + a gap away from its centre."""
+    u = RELATIONS[pred]
+    ex = target_desc.get("extent_xy") or [target_desc["width"]] * 2
+    half_t = abs(u[0]) * ex[0] / 2 + abs(u[1]) * ex[1] / 2
+    half_o = (obj_desc or {}).get("width", 0.05) / 2
+    d = max(0.06, half_t + half_o + gap)
+    c = target_desc["center"]
+    return {"center": [c[0] + u[0] * d, c[1] + u[1] * d], "top_z": 0.0, "width": 0.06, "extent_xy": [0.06, 0.06],
+            "spot_for": pred}
+
+
 def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, overrides=None,
               performance=None, patches=None, feasibility=None) -> list[dict]:
     """patches: parameter patches per (skill, shape group of the item); explicit overrides win over patches.
@@ -76,7 +94,7 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
         elif v["verdict"] == "missing":
             subtasks.append({"obj": g["obj"], "target": None, "error": "missing_capability", "steps": [],
                              "routing": {"reason": f"feasibility: {v['reason']}", "capability": v.get("capability")}})
-    goals = [g for g in task["goal"] if g["pred"] in ("inside", "on")]
+    goals = [g for g in task["goal"] if g["pred"] in ("inside", "on") or g["pred"] in RELATIONS]
     # Far objects first, so the arm does not sweep over things it already placed.
     goals.sort(key=lambda g: -math.hypot(*percepts[g["obj"]]["center"]) if percepts.get(g["obj"]) else 0)
     # A required sequence (task "order") overrides the distance order.
@@ -112,6 +130,7 @@ def make_plan(task: dict, percepts: dict, cards: dict, allowed_grasps=None, over
             why = {**why, "patches": applied}
         subtasks.append({
             "obj": g["obj"], "target": g["target"], "goal": g, "routing": why,
+            **({"relation": g["pred"]} if g["pred"] in RELATIONS else {}),
             "steps": [{"skill": grasp, "params": prm(grasp)},
                       {"skill": "lift", "params": prm("lift")},
                       {"skill": "place_in", "mode": mode, "slot": slots[g["obj"]], "params": prm("place_in")}],
