@@ -35,7 +35,7 @@ CACHE_DIR = ROOT / "cache" / "llm"
 PROMPT_DIR = pathlib.Path(__file__).resolve().parent / "prompts"
 BACKENDS = ("rule", "claude_cli", "spark")
 DEFAULT_MODEL = {"rule": "rule-v1", "claude_cli": os.environ.get("KINTSUGI_CLAUDE_MODEL", "sonnet"),
-                 "spark": os.environ.get("META_MODEL", "muse-spark")}
+                 "spark": "muse-spark"}     # spark: META_MODEL / the model in the local settings wins (kintsugi.settings)
 
 
 class ModelRejected(Exception):
@@ -82,10 +82,11 @@ class Result:
 class ModelClient:
     def __init__(self, backend: str | None = None, model: str | None = None, dry_run: bool | None = None,
                  use_cache: bool = True):
-        self.backend = backend or os.environ.get("KINTSUGI_LLM", "rule")
+        from .. import settings
+        self.backend = backend or os.environ.get("KINTSUGI_LLM", "rule")    # the Studio's default comes from settings
         if self.backend not in BACKENDS:
             raise ValueError(f"Unknown backend '{self.backend}'. Known: {BACKENDS}")
-        self.model = model or DEFAULT_MODEL[self.backend]
+        self.model = model or (settings.get("meta_model") if self.backend == "spark" else None) or DEFAULT_MODEL[self.backend]
         self.dry_run = bool(int(os.environ.get("KINTSUGI_LLM_DRYRUN", "0"))) if dry_run is None else dry_run
         self.use_cache = use_cache
         self.stats = {"calls": 0, "cached": 0, "would_call": 0, "repairs": 0, "rejected": 0}
@@ -210,9 +211,11 @@ def _call_claude_cli(system: str, user: str, model: str, timeout: float = 240) -
 
 def _call_openai_compatible(system: str, user: str, model: str, timeout: float = 120) -> str:
     """Meta API call. ASSUMPTION to verify when the key arrives: an OpenAI-compatible /chat/completions endpoint."""
-    base, key = os.environ.get("META_API_BASE"), os.environ.get("META_API_KEY")
+    from .. import settings
+    base, key = settings.get("meta_api_base"), settings.get("meta_api_key")
     if not (base and key):
-        raise RuntimeError("Set META_API_BASE and META_API_KEY for KINTSUGI_LLM=spark")
+        raise RuntimeError("Meta API not configured: add the API address and key in the app's Settings "
+                           "(or set META_API_BASE and META_API_KEY)")
     body = json.dumps({"model": model, "temperature": 0,
                        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
     req = urllib.request.Request(base.rstrip("/") + "/chat/completions", data=body.encode(),

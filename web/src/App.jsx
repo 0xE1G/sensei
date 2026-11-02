@@ -7,6 +7,7 @@ import Episodes from "./panels/Episodes.jsx";
 import Investigator from "./panels/Investigator.jsx";
 import Experiments from "./panels/Experiments.jsx";
 import Skills from "./panels/Skills.jsx";
+import { AssetGate, SettingsDrawer } from "./panels/Settings.jsx";
 
 // Small inline icons (24px grid, stroke = currentColor); no icon library.
 const ICONS = {
@@ -16,6 +17,7 @@ const ICONS = {
   investigator: <><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></>,
   experiments: <path d="M9 3h6M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3M7.5 15h9" />,
   skills: <path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" />,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" /></>,
 };
 
 const SECTIONS = [
@@ -30,6 +32,8 @@ const TAB = Object.fromEntries(SECTIONS.flatMap(([, items]) => items.map(([k, ti
 
 export default function App() {
   const [tab, setTab] = useState("studio");
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);   // the Studio re-reads backends / masks when it changes
   const [sel, setSel] = useState({ run: "demo/1_bowl_before_repair", trial: "00001" });
   const runs = useAsync(getRuns, [tab]);   // re-read on tab change: studio jobs add runs
   const lastRuns = useRef(null);           // keep showing the previous list while it refreshes (no flash)
@@ -63,15 +67,20 @@ export default function App() {
               </div>
             ))}
           </nav>
+          <button className="top-settings" onClick={() => setShowSettings(true)} title="Settings: model access, masks, downloads" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS.settings}</svg>
+          </button>
         </div>
       </header>
+      {showSettings && <SettingsDrawer onClose={() => setShowSettings(false)} onChanged={() => setSettingsVersion((v) => v + 1)} />}
+      <AssetGate>
       <main className="content">
         <header className="page-head">
           <h2>{TAB[tab].title}</h2>
           <p>{TAB[tab].desc}</p>
         </header>
         {/* the studio stays mounted so a running job keeps streaming while other tabs are open */}
-        <div style={{ display: tab === "studio" ? "block" : "none" }}><Guard><Studio open={open} /></Guard></div>
+        <div style={{ display: tab === "studio" ? "block" : "none" }}><Guard><Studio open={open} settingsVersion={settingsVersion} openSettings={() => setShowSettings(true)} /></Guard></div>
         <Loading state={runsState}>
           {(list) => (
             <Guard resetKey={tab}>
@@ -84,6 +93,7 @@ export default function App() {
           )}
         </Loading>
       </main>
+      </AssetGate>
     </div>
   );
 }

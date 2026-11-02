@@ -49,6 +49,12 @@ SCHEMA = {
 }
 
 
+def refresh_templates():
+    """Templates registered after start-up (downloaded objects) become valid in the schema (list updated in place)."""
+    enum = SCHEMA["properties"]["task"]["properties"]["objects"]["items"]["properties"]["template"]["enum"]
+    enum[:] = sorted(DEFAULTS)
+
+
 def catalog_text() -> str:
     lines = []
     from ...sim.assets import assets

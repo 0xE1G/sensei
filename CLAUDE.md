@@ -649,6 +649,28 @@ round started by the search (see status).
      untouched); export -> import into an empty user library REJECTED it (fresh seeds 11/16 vs 0/16, p 0.0005 but under
      70%; its creation gate had 14/16), contribute --dry-run rejected it the same way; pass path: the stand-up card
      against a base without it 16/16 vs 0/16 (p 1.5e-05), regression pass, files moved with lineage.
+8n. **Settings, mask choice, downloads in the app (2026-11-02)**:
+   - `kintsugi/settings.py`: model access kept on this machine in `config/local.json` (git-ignored, owner-only where the
+     OS allows): meta_api_key / meta_api_base / meta_model, sam_api_key / sam_api_base, default_backend and
+     default_masks (the Studio's defaults only: scripts and experiments keep `KINTSUGI_LLM` / their own arguments).
+     Environment variables win (META_API_KEY, META_API_BASE, META_MODEL, SAM_API_KEY, SAM_API_BASE). `public()` shows
+     secrets only as set + last four characters; addresses must be https (or localhost). The spark backend reads these.
+   - Server: GET/POST /api/settings, POST /api/settings/test (one tiny call: spark or claude_cli; errors scrubbed of
+     keys), GET /api/assets (robot + scanned status, download progress), POST /api/assets/download (one at a time, in a
+     thread; after scanned objects `templates.refresh_assets()` registers them in place, incl. the task_spec schema, so
+     no restart). `kintsugi/assets_fetch.py` holds the download code (scripts/fetch_assets.py is a thin wrapper).
+   - Masks: Studio job setting `masks` "sim" | "sam" -> run_batch(perception=...). `perception/sam.py`
+     `availability()`; Perception(mode="sam") refuses to start (never falls back silently to simulator masks) and the
+     server refuses a SAM job, until SAM access is set AND its client is written (API format unknown until access
+     arrives). Repairs keep simulator masks.
+   - UI: gear in the top bar opens a Settings drawer (language model default, Meta Spark address/model/key with Save /
+     Test / Remove, Claude CLI test, mask default + SAM access, downloads with progress); the app shows a first-run
+     screen with a Download button when the robot model is missing (nothing downloads until pressed); the Studio shows
+     a hint with a link when scanned objects are missing; run settings have a Masks select (SAM disabled with the reason).
+   - Checked in the browser: drawer, Claude test (answered in 2.6 s), partial scanned download from the UI (one object
+     moved aside -> hint -> Download the rest -> byte-identical, served by the running server without restart),
+     first-run screen (robot folder renamed temporarily), Masks select; fake-key round trip (masked, not leaked, http
+     address refused); SAM job refused by the server.
 9. **Spark + SAM switch-over**, re-run reported experiments on Meta models, perception gap on ~50 episodes.
 10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
    primitive + particle liquid), video imitation, curriculum, self-proposed tasks.
@@ -657,7 +679,7 @@ round started by the search (see status).
 ```
 pip install -r requirements.txt
 python scripts/fetch_assets.py
-python scripts/fetch_assets.py --scanned             # optional: 33 scanned household objects (~50 MB)
+python scripts/fetch_assets.py --scanned             # optional: 32 scanned household objects (~50 MB); or Settings > Downloads in the app
 python scripts/smoke_test.py                       # run after every change
 python scripts/skills.py list                       # base + user library; export / import / contribute packs
 python scripts/run_task.py sort_with_bowl -n 8 --oracle         # the demo task, failures checked by the oracle

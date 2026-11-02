@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { forget, getReplay, studio } from "../api.js";
+import { assetsApi, forget, getReplay, studio } from "../api.js";
 import { Chip, Clock, Code, Details, ScrollRow, useAsync } from "../ui.jsx";
 import { loadMeshGeometries, Viewer } from "../viewer.jsx";
 
@@ -310,7 +310,8 @@ function Settings({ info, s, set }) {
   const [openS, setOpen] = useState(false);
   const maxW = Math.max(1, Math.min((info?.max_workers || 2) - 1, 16));
   const summary = [`${s.n} scene${s.n > 1 ? "s" : ""}`, `${s.workers} in parallel`, s.autoFix ? "auto-fix on" : "auto-fix off",
-    s.retries ? "retries on" : null, s.hard ? "harder physics" : null].filter(Boolean).join(" · ");
+    s.retries ? "retries on" : null, s.hard ? "harder physics" : null, s.masks === "sam" ? "SAM 3 masks" : null].filter(Boolean).join(" · ");
+  const sam = info?.masks?.sam;
   return (
     <div className="settings2">
       <button type="button" className="settings-summary" onClick={() => setOpen((o) => !o)} aria-expanded={openS}>
@@ -333,6 +334,12 @@ function Settings({ info, s, set }) {
             <input type="checkbox" checked={s.retries} onChange={(e) => set({ ...s, retries: e.target.checked })} /> Retry a failed step</label>
           <label className="toggle" title="Friction x0.35-0.7 and mass x1.3-2 per scene: a stress test that gives the library something to fix">
             <input type="checkbox" checked={s.hard} onChange={(e) => set({ ...s, hard: e.target.checked })} /> Harder physics</label>
+          <label title={sam?.available ? "SAM 3 is called at key moments of each scene (start, before a grasp, after a place, on failures); repairs keep simulator masks" : sam?.reason}>Masks
+            <select value={s.masks} onChange={(e) => set({ ...s, masks: e.target.value })}>
+              <option value="sim">Simulator</option>
+              <option value="sam" disabled={!sam?.available}>SAM 3{sam?.available ? "" : " (not available)"}</option>
+            </select>
+          </label>
         </div>
       )}
     </div>
@@ -444,11 +451,11 @@ function Outcome({ result, open }) {
 }
 
 // ---------------------------------------------------------------------------------------------- page
-export default function Studio({ open }) {
+export default function Studio({ open, settingsVersion = 0, openSettings }) {
   const [info, setInfo] = useState(null);
   const [prompt, setPrompt] = useState("");
   const [backend, setBackend] = useState(null);
-  const [settings, setSettings] = useState({ n: 8, workers: 4, autoFix: true, retries: true, hard: false });
+  const [settings, setSettings] = useState({ n: 8, workers: 4, autoFix: true, retries: true, hard: false, masks: "sim" });
   const [plan, setPlan] = useState(null);
   const [job, setJob] = useState(null);
   const [history, setHistory] = useState([]);
@@ -460,12 +467,23 @@ export default function Studio({ open }) {
     Promise.all([studio.info(), studio.jobs().catch(() => [])]).then(([i, h]) => {
       setInfo(i);
       setBackend(i.default_backend);
-      setSettings((s) => ({ ...s, workers: i.default_workers }));
+      setSettings((s) => ({ ...s, workers: i.default_workers, masks: i.default_masks || "sim" }));
       setHistory(h);
       if (i.running) attach(i.running, true);
       else if (h.length) attach(h[0].id, h[0].running);
     }).catch(() => {});
   }, []);
+  // Settings changed (a key added, a default picked): re-read which backends and masks are available.
+  useEffect(() => {
+    if (!settingsVersion) return;
+    studio.info().then((i) => {
+      setInfo(i);
+      setBackend((b) => (i.backends.includes(b) ? b : i.default_backend));
+      setSettings((s) => ({ ...s, masks: i.masks?.[s.masks]?.available ? s.masks : "sim" }));
+    }).catch(() => {});
+  }, [settingsVersion]);
+  const [scanned, setScanned] = useState(null);
+  useEffect(() => { assetsApi.status().then((a) => setScanned(a.scanned)).catch(() => {}); }, [settingsVersion]);
 
   // running: true only for a job known to be running (just started, or reported by the server); a past run opened
   // from the list starts as not running, so the live player never picks up its old live files
@@ -529,7 +547,7 @@ export default function Studio({ open }) {
     try {
       const j = await studio.start({ prompt, task: plan.spec.task, program: plan.program?.program,
         program_source: plan.program?.source, n: settings.n, workers: settings.workers, retries: settings.retries,
-        auto_fix: settings.autoFix, hard: settings.hard, backend });
+        auto_fix: settings.autoFix, hard: settings.hard, backend, masks: settings.masks });
       attach(j.id, true);
       refreshHistory();                                    // the new job shows (and is highlighted) in Recent runs
     } catch (e) { setPlan({ ...plan, runError: String(e.message || e) }); }
@@ -613,6 +631,11 @@ export default function Studio({ open }) {
     <div className="studio grid">
       <Composer info={info} prompt={prompt} setPrompt={setPrompt} backend={backend} setBackend={setBackend}
                 onSubmit={doPlan} busy={plan?.phase === "spec" || plan?.phase === "program"} locked={!!job?.running} />
+      {scanned && scanned.present < scanned.total && (
+        <p className="sub asset-hint">{scanned.present ? `${scanned.total - scanned.present} of ${scanned.total}` : scanned.total} household
+          objects (scanned mugs, bowls, bottles, tools) are not downloaded yet, so tasks cannot use them.{" "}
+          <button className="linkish" onClick={openSettings}>Download in Settings</button></p>
+      )}
 
       <RecentRuns history={history} current={!plan || job ? job?.id : null}
                   onPick={(h) => { if (!job?.running) { setPlan(null); attach(h.id, h.running); } }} />

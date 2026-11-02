@@ -178,6 +178,11 @@ def _primitive_surface(gtype: int, size, rng, n: int = 8000) -> np.ndarray | Non
 
 class Perception:
     def __init__(self, scene, mode: str = "sim", cameras=("front", "top"), width=320, height=240):
+        if mode == "sam":                    # never fall back silently to simulator masks
+            from .sam import availability
+            ok, why = availability()
+            if not ok:
+                raise RuntimeError(why)
         self.scene, self.mode = scene, mode
         self.calls = 0
         self.cams = [Camera(scene.model, scene.data, c, width, height) for c in cameras] if mode != "ground_truth" else []

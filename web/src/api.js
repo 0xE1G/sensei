@@ -48,3 +48,13 @@ export const studio = {
   workers: (id) => send("GET", `studio/live/${id}`),
   episode: (id, ep, offset) => send("GET", `studio/live/${id}/${ep}?offset=${offset}`),
 };
+// Settings (keys are sent once and never come back in full) and third-party asset downloads.
+export const settingsApi = {
+  get: () => send("GET", "settings"),
+  save: (body) => send("POST", "settings", body),
+  test: (backend) => send("POST", "settings/test", { backend }),
+};
+export const assetsApi = {
+  status: () => send("GET", "assets"),
+  download: (which) => send("POST", "assets/download", { which }),
+};

@@ -164,6 +164,7 @@ def _batch(job, task, seeds, run_id, phase, emit):
     from .runner import run_batch
     emit("stage", stage=phase, state="start", run_id=run_id, n=len(seeds), seeds=seeds)
     s = run_batch(task["name"], workers=job["workers"], task_spec=task, seeds=seeds, run_id=run_id,
+                  perception=job.get("masks") or "sim",
                   save_video=False, save_poses=True, save_failures=True, success_sample=1, progress=False,
                   recovery=job["recovery"], perturb=HARD_PHYSICS if job.get("hard") else None, feasibility=True,
                   on_result=lambda r: emit("trial", phase=phase, seed=r["seed"], success=r["success"],

@@ -73,12 +73,14 @@ ARTICULATED = {"drawer": {"part": "drawer", "type": "slide", "unit": "m"},
 FIXED_BY_DEFAULT = {"bin", "tray", "zone", "drawer", "door"}
 
 
-def _register_assets():
+def _register_assets(known=frozenset()):
     """Models dropped into objects/ (kintsugi.sim.assets) become templates: no parameters except "open" for a moving
     part; size, parts and joint come from the file."""
     from .assets import assets
     out = set()
     for name, a in assets().items():
+        if name in known:
+            continue
         if name in DEFAULTS:
             print(f"[assets] {name}: a built-in template has this name; file ignored")
             continue
@@ -100,6 +102,18 @@ def _register_assets():
 
 
 ASSET_TEMPLATES = _register_assets()
+
+
+def refresh_assets() -> set:
+    """Register models downloaded or dropped in after start-up (the web app's download button), in place, so modules
+    that imported ASSET_TEMPLATES see them. Returns the new template names."""
+    from .assets import assets
+    assets.cache_clear()
+    new = _register_assets(known=frozenset(ASSET_TEMPLATES))
+    ASSET_TEMPLATES.update(new)
+    from ..agents.jobs import task_spec
+    task_spec.refresh_templates()
+    return new
 
 
 def capability_for(template: str, verb: str) -> str:

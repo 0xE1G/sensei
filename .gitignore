@@ -16,3 +16,5 @@ web/node_modules/
 web/dist/
 # local skill library: what this checkout discovered (kintsugi.skills.library USER_DIR)
 user_library/
+# local settings with API keys (kintsugi/settings.py): never committed
+config/

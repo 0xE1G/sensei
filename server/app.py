@@ -416,10 +416,11 @@ _job = {"id": None, "proc": None}
 
 
 def _backends():
+    from kintsugi import settings
     out = ["rule"]
     if shutil.which("claude"):
         out.append("claude_cli")
-    if os.environ.get("META_API_KEY"):
+    if settings.spark_ready():
         out.append("spark")
     return out
 
@@ -428,8 +429,14 @@ def _backends():
 def studio_info():
     from kintsugi.runner import default_workers
     from kintsugi.studio import EXAMPLES
+    from kintsugi import settings
+    from kintsugi.perception.sam import availability
     b = _backends()
-    return {"backends": b, "default_backend": os.environ.get("KINTSUGI_LLM") or b[-1], "examples": EXAMPLES,
+    pref = settings.get("default_backend") or os.environ.get("KINTSUGI_LLM")
+    sam_ok, sam_why = availability()
+    return {"backends": b, "default_backend": pref if pref in b else b[-1], "examples": EXAMPLES,
+            "masks": {"sim": {"available": True}, "sam": {"available": sam_ok, "reason": sam_why}},
+            "default_masks": settings.get("default_masks") if settings.get("default_masks") == "sam" and sam_ok else "sim",
             "max_workers": os.cpu_count() or 2, "default_workers": default_workers(),
             "running": _job["id"] if _job["proc"] is not None and _job["proc"].poll() is None else None}
 
@@ -458,12 +465,20 @@ def studio_start(body: dict = Body(...)):
         raise HTTPException(409, f"job {_job['id']} is still running")
     job_id = time.strftime("%Y%m%d-%H%M%S_studio")
     d = RUNS / job_id
-    d.mkdir(parents=True)
     job = {"id": job_id, "prompt": body["prompt"], "task": body["task"], "program": body.get("program"),
            "program_source": body.get("program_source"), "n": max(1, min(int(body.get("n", 8)), 64)),
            "workers": max(1, min(int(body.get("workers", 4)), os.cpu_count() or 2)),
            "recovery": 2 if body.get("retries", True) else 0, "auto_fix": bool(body.get("auto_fix", True)), "hard": bool(body.get("hard", False)),
-           "backend": body.get("backend"), "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+           "backend": body.get("backend"), "masks": body.get("masks") or "sim",
+           "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    if job["masks"] not in ("sim", "sam"):
+        raise HTTPException(400, "masks must be sim or sam")
+    if job["masks"] == "sam":
+        from kintsugi.perception.sam import availability
+        ok, why = availability()
+        if not ok:
+            raise HTTPException(400, why)
+    d.mkdir(parents=True)
     (d / "job.json").write_text(json.dumps(job, indent=1))
     env = {**os.environ, "KINTSUGI_LIVE_DIR": str(d / "live"), "PYTHONUNBUFFERED": "1"}
     if job["backend"]:
@@ -582,3 +597,98 @@ if WEB_DIST.exists():
     @app.get("/")
     def index():
         return FileResponse(WEB_DIST / "index.html")
+
+
+# ----------------------------------------------------------------------------- settings and assets
+# Local only (the server listens on localhost): model access keys are saved on this machine (config/local.json,
+# git-ignored) and never sent back to the browser; asset downloads run one at a time in a background thread.
+import threading
+
+_dl = {"which": None, "done": 0, "total": 0, "label": "", "error": None, "finished": None, "running": False}
+
+
+@app.get("/api/settings")
+def get_settings():
+    from kintsugi import settings
+    from kintsugi.perception.sam import availability
+    ok, why = availability()
+    return {**settings.public(), "claude_cli_found": bool(shutil.which("claude")),
+            "sam": {"available": ok, "reason": why}, "config_file": "config/local.json"}
+
+
+@app.post("/api/settings")
+def set_settings(body: dict = Body(...)):
+    from kintsugi import settings
+    try:
+        settings.save(body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return get_settings()
+
+
+@app.post("/api/settings/test")
+def test_backend(body: dict = Body(...)):
+    """One tiny call to check access; the answer says only whether it worked (never the key)."""
+    from kintsugi.agents import llm
+    from kintsugi import settings
+    backend = body.get("backend")
+    t0 = time.time()
+    try:
+        if backend == "spark":
+            out = llm._call_openai_compatible("Reply with the single word OK.", "Say OK.",
+                                              settings.get("meta_model") or llm.DEFAULT_MODEL["spark"], timeout=30)
+        elif backend == "claude_cli":
+            out = llm._call_claude_cli("Reply with the single word OK.", "Say OK.", llm.DEFAULT_MODEL["claude_cli"],
+                                       timeout=90)
+        else:
+            raise HTTPException(400, "backend must be spark or claude_cli")
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = str(e)
+        for secret in (settings.get("meta_api_key"), settings.get("sam_api_key")):
+            if secret:
+                msg = msg.replace(secret, "…")
+        return {"ok": False, "message": f"{type(e).__name__}: {msg[:300]}", "seconds": round(time.time() - t0, 1)}
+    return {"ok": True, "message": f"answered: {str(out).strip()[:40]}", "seconds": round(time.time() - t0, 1)}
+
+
+@app.get("/api/assets")
+def assets_status():
+    from kintsugi.assets_fetch import status
+    return {**status(), "download": {k: v for k, v in _dl.items()}}
+
+
+def _download(which):
+    from kintsugi import assets_fetch as F
+
+    def prog(i, n, label):
+        _dl.update(done=i, total=n, label=label)
+    try:
+        if which == "robot":
+            F.fetch_robot(prog)
+        else:
+            r = F.fetch_scanned(prog)
+            if r["failed"]:
+                _dl["error"] = f"{len(r['failed'])} object(s) failed: " + "; ".join(
+                    f"{k} ({v[:80]})" for k, v in list(r["failed"].items())[:3])
+            from kintsugi.sim.templates import refresh_assets
+            refresh_assets()                     # usable at once: task generation and scenes see the new objects
+    except Exception as e:
+        _dl["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        _meshes_payload.cache_clear()
+        _asset_mesh_payload.cache_clear()            # a missing object was cached as None
+        _dl.update(running=False, finished=time.strftime("%H:%M:%S"))
+
+
+@app.post("/api/assets/download")
+def assets_download(body: dict = Body(...)):
+    which = body.get("which")
+    if which not in ("robot", "scanned"):
+        raise HTTPException(400, "which must be robot or scanned")
+    if _dl["running"]:
+        raise HTTPException(409, f"already downloading {_dl['which']}")
+    _dl.update(which=which, done=0, total=0, label="", error=None, finished=None, running=True)
+    threading.Thread(target=_download, args=(which,), daemon=True).start()
+    return {k: v for k, v in _dl.items()}
