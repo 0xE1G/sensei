@@ -98,6 +98,11 @@ class _Crowded(Exception):
 def _footprint(o) -> float:
     """Radius of the circle an object needs on the table."""
     p = resolve_params(o.template, o.params)
+    if o.pose == "lying":
+        from .templates import lying_extent
+        ext = lying_extent(o.template, o.params)
+        if ext:
+            return 0.5 * math.hypot(*ext) + 0.01
     if o.template in ("bin", "tray", "zone"):
         return 0.5 * math.hypot(p["width"], p["depth"])
     if o.template == "mug":
@@ -142,6 +147,8 @@ def _sample_once(objs, rng, max_tries=400, fixed=None):
             raise _Crowded(o.id)
         yaw_range = {"mug": math.pi, "bar": math.pi / 2, "block": math.pi / 4,
                      "bin": 0.3, "tray": 0.3, "zone": 0.3}.get(o.template, 0.0)
+        if o.pose == "lying":
+            yaw_range = math.pi / 2                  # any direction along the table
         yaw = rng.uniform(-yaw_range, yaw_range) if yaw_range else 0.0
         if cabinet:
             yaw = math.atan2(y, x) + rng.uniform(-0.12, 0.12)      # local -x (the front) faces the robot

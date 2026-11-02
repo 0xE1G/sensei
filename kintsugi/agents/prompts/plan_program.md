@@ -1,4 +1,4 @@
-version: 8
+version: 9
 You write a short Python program that makes a simulated robot arm (Franka Panda, parallel gripper) do a tabletop
 task. The program calls a small API; it never controls motors. Grasping, lifting and placing are verified skills
 that already exist: the robot chooses the best grasp for each object itself unless you name one. Answer with ONE
@@ -40,6 +40,8 @@ Rules:
 - A "joint" goal (open or close a drawer or door) is a motion, not a pick, named after the object's moving part:
   use("open_drawer", obj) / use("open_door", obj) / use("close_drawer", obj) ... where drawer/door is the object's
   "moving_part" (an imported cabinet may have one). Write the call even if the library lacks the capability.
+- An "upright" goal (stand a fallen object back up where it lies) is a motion too: use("stand_up", obj). Write it
+  even if the library lacks the capability.
   Never pick while holding something.
 - Keep it short. No comments needed.
 

@@ -117,6 +117,7 @@ class ObjectSpec:
     params: dict = field(default_factory=dict)
     role: str = "item"          # "item" (to be moved) or "target"
     fixed: bool | None = None    # None -> template default
+    pose: str | None = None      # "lying": on its side (long axis horizontal) instead of upright; loose objects only
 
 
 def resolve_params(template: str, params: dict) -> dict:
@@ -271,7 +272,8 @@ def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> d
         body.pos = [x, y, h / 2]
         body.add_geom(name=f"{obj.id}_g", type=G.mjGEOM_CYLINDER, size=[r, h / 2, 0], rgba=rgba,
                       mass=p["mass"], friction=fr, condim=4)
-        meta.update(height=h, width=2 * r, hollow=False, bottom_offset=-h / 2)
+        # both ends alike: standing on either end is upright (perception cannot tell the ends apart either)
+        meta.update(height=h, width=2 * r, hollow=False, bottom_offset=-h / 2, symmetric_ends=True)
     elif t in ("bowl", "cup", "mug"):
         if t == "bowl":
             r_base, wall_h, flare = p["radius"] * 0.6, p["depth"], math.radians(p["flare_deg"])
@@ -331,4 +333,49 @@ def add_object(spec: mujoco.MjSpec, obj: ObjectSpec, pos, yaw: float = 0.0) -> d
         meta.update(height=0.001, width=max(w, d), hollow=False, half_x=w / 2, half_y=d / 2, rim_z=0.001,
                     floor_z=0.001)
     meta["pos"] = [x, y]
+    if obj.pose == "lying":
+        _lay_down(body, obj, meta, x, y, yaw)
     return meta
+
+
+LIES_DOWN = ("cylinder", "cup", "mug")         # built-in templates with a well-defined "on its side"; plus loose imports
+
+
+def lying_extent(template: str, params: dict) -> tuple[float, float] | None:
+    """(length along the table, thickness) of an object lying on its side, or None if it cannot lie down."""
+    if template in ASSET_TEMPLATES and template not in ARTICULATED and template not in FIXED_BY_DEFAULT:
+        from .assets import assets
+        a = assets()[template]
+        return float(a["height"]), float(a["hi"][1] - a["lo"][1])
+    if template not in LIES_DOWN:
+        return None
+    p = resolve_params(template, params)
+    return float(p["height"]), float(2 * p["radius"])
+
+
+def _lay_down(body, obj, meta, x, y, yaw):
+    """Turn an object onto its side: rotate 90 deg about its local x axis (its upright z axis ends horizontal, along
+    the table direction yaw + 90 deg), centred on (x, y) and resting on the table. meta keeps the upright geometry
+    (height, bottom_offset), which describes the object once it stands again; meta["lying"] marks the start pose."""
+    t = obj.template
+    if t in ASSET_TEMPLATES:
+        from .assets import assets
+        a = assets()[t]
+        lo = np.array([a["lo"][0], a["lo"][1], 0.0])
+        hi = np.array([a["hi"][0], a["hi"][1], a["height"]])        # the model rests on z = 0 inside its body
+    elif t in LIES_DOWN:
+        p = meta["params"]
+        r = meta.get("rim_radius", p["radius"]) if t != "cylinder" else p["radius"]
+        z0 = -p["height"] / 2 if t == "cylinder" else 0.0
+        lo, hi = np.array([-r, -r, z0]), np.array([r, r, z0 + meta["height"]])
+    else:
+        raise ValueError(f"{t} cannot be laid on its side (pose 'lying': {', '.join(LIES_DOWN)} or imported loose objects)")
+    q_lie = [math.cos(math.pi / 4), math.sin(math.pi / 4), 0.0, 0.0]          # +90 deg about local x: y -> z
+    Rl = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float)
+    c = Rl @ ((lo + hi) / 2)
+    cy_, sy_ = math.cos(yaw), math.sin(yaw)
+    off = np.array([cy_ * c[0] - sy_ * c[1], sy_ * c[0] + cy_ * c[1]])
+    body.quat = _quat_mul(_quat_yaw(yaw), q_lie)
+    body.pos = [x - off[0], y - off[1], float(-(Rl @ lo)[2]) + 0.001]
+    meta["lying"] = True
+

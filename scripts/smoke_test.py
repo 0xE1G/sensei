@@ -213,6 +213,22 @@ def main():
            "goal": [{"pred": "left_of", "obj": "block", "target": "bowl"}]}
     rr, _ = run_episode(rel, seed=0)
     results.append(check("relational goal (left_of)", rr["success"], str([s_.get("label") for s_ in rr["subtasks"]])))
+    # A bottle lying on its side: perceived with its length along the table (truth agrees), feasibility asks for
+    # stand_up, and the stand-in turn (hand turned about the fingertip line) stands it back up.
+    st_task = make_task("stand_up", seed=0)
+    sc = build_scene(st_task, seed=0)
+    dl, gl = Perception(sc, "sim").perceive(["bottle"])["bottle"], Perception(sc, "ground_truth").perceive(["bottle"])["bottle"]
+    true_len = st_task["objects"][0]["params"]["height"]
+    sprop = client.complete("propose_primitive", {"capability": "stand_up", "why": "smoke", "obj": {}, "target": {}}).output
+    scard = {"name": sprop["name"], "kind": "stand_up", "version": 1, "impl": "generated", "code": sprop["code"],
+             "params": sprop["params"]}
+    rs, _ = run_episode(st_task, seed=0, extra_cards={scard["name"]: scard}, program="use('stand_up', find_one(id='bottle'))")
+    rmiss, _ = run_episode(st_task, seed=0, feasibility=True, library=seed_library(), performance={}, patches={})
+    results.append(check("lying bottle: perception + stand_up motion",
+                         abs(dl["extent_major"] - true_len) < 0.01 and abs(gl["extent_major"] - true_len) < 0.01
+                         and rs["success"] and rmiss.get("missing_capability") == "stand_up",
+                         f"length {100 * dl['extent_major']:.1f} / truth {100 * gl['extent_major']:.1f} / "
+                         f"{100 * true_len:.1f} cm, stood up {rs['success']}, missing {rmiss.get('missing_capability')}"))
 
     # Investigator on the rule backend: a tall cylinder fails with top_grasp; the shallow-grasp cause is confirmed.
     spec = probe(7, {"template": "cylinder", "params": {"radius": 0.025, "height": 0.14}, "pos": [0.5, 0.1], "yaw": 0.0})

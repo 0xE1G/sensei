@@ -30,7 +30,8 @@ SCHEMA = {
                     "type": "object", "required": ["id", "template"],
                     "properties": {"id": {"type": "string"}, "template": {"enum": sorted(DEFAULTS)},
                                    "role": {"enum": ["item", "target", "obstacle"]},
-                                   "params": {"type": "object"}, "fixed": {"type": "boolean"}}}},
+                                   "params": {"type": "object"}, "fixed": {"type": "boolean"},
+                                   "pose": {"enum": ["upright", "lying"]}}}},
                 "goal": {"type": "array", "items": {
                     "type": "object", "required": ["pred", "obj"],
                     "properties": {"pred": {"enum": ["inside", "on", "joint", "distance", "height", "upright",
@@ -87,6 +88,11 @@ def validate(out, inputs) -> list[str]:
     for o in t["objects"]:
         if not ID_RE.match(o["id"]):
             errs.append(f"object id '{o['id']}' must be snake_case (lowercase letters, digits, _)")
+        if o.get("pose") == "lying":
+            from ...sim.templates import lying_extent
+            if lying_extent(o["template"], o.get("params") or {}) is None:
+                errs.append(f"{o['id']}: a {o['template']} cannot lie on its side (pose 'lying' only for loose "
+                            f"cylinders, cups, mugs and imported loose objects)")
         allowed = set(DEFAULTS[o["template"]])
         for k, v in (o.get("params") or {}).items():
             if k not in allowed:
@@ -181,7 +187,8 @@ def to_task(out, inputs) -> dict:
     """The executor's task dict from a validated 'ok' output."""
     t = out["task"]
     objs = [{"id": o["id"], "template": o["template"], "role": "item" if o.get("role") == "obstacle" else o.get("role", "item"),
-             "params": dict(o.get("params") or {}), **({"fixed": o["fixed"]} if "fixed" in o else {})}
+             "params": dict(o.get("params") or {}), **({"fixed": o["fixed"]} if "fixed" in o else {}),
+             **({"pose": o["pose"]} if o.get("pose") == "lying" else {})}
             for o in t["objects"]]
     return {"name": t["name"], "prompt": t.get("prompt") or inputs["prompt"], "objects": objs,
             "goal": [dict(g) for g in t["goal"]], "constraints": [dict(c) for c in t.get("constraints", [])],

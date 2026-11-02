@@ -81,8 +81,12 @@ RULE_CODE = '''def primitive(obj, target, p):
 
 
 def rule(inputs) -> dict:
-    """Stand-in: opening a part (drawer, door) -> grasp the handle and pull; otherwise a two-finger push."""
+    """Stand-in: opening a part (drawer, door) -> grasp the handle and pull; standing a fallen object up -> grasp
+    and turn it; otherwise a two-finger push."""
     cap = inputs["capability"].split(":")[0]
+    if cap.startswith("stand_up"):
+        from .reorient_motions import stand_in
+        return stand_in()
     if (inputs.get("obj") or {}).get("parts", {}).get("handle") and ("open" in cap or "close" in cap):
         from .open_motions import stand_in
         return stand_in(cap)

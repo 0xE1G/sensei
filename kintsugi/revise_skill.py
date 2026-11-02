@@ -26,6 +26,7 @@ import numpy as np
 
 from .create_skill import CAPABILITIES, SkillCreator, _log
 from .search.explore import ALPHA, REGRESSION_TASKS, mcnemar_p
+from .agents.llm import ModelRejected
 from .runner import ROOT, wilson
 from .skills.library import load_cards, save_card
 from .tasks.splits import split_seeds
@@ -260,8 +261,16 @@ class SkillReviser(SkillCreator):
             for attempt in (1, 2):
                 k = self.n_strategies if attempt == 1 else 1
                 options, others = [], []
+                rejected = []
                 for i in range(k):
-                    card, meta = self.propose(before, feedback, others or None)
+                    try:
+                        card, meta = self.propose(before, feedback, others or None)
+                    except ModelRejected as e:           # an invalid proposal is a failed strategy, not a crash
+                        rejected.append(str(e))
+                        self.report["phases"].setdefault("proposals", []).append(
+                            {"attempt": attempt, "option": i, "rejected": str(e), "feedback": feedback})
+                        _log(f"{'revision'} {attempt}{'abc'[i] if k > 1 else ''} rejected: {str(e)[:200]}")
+                        continue
                     if card["name"] in [o[0]["name"] for o in options] or card["name"] == self.old["name"]:
                         card["name"] = f"{card['name']}_{attempt}{'abc'[i]}"
                     tag = f"r{attempt}{'abc'[i]}"
@@ -271,6 +280,10 @@ class SkillReviser(SkillCreator):
                     rows, cands = self.search(card, tag)
                     options.append((card, meta, rows, cands, tag))
                     others.append(f"{card['name']}: {card['description'][:160]}")
+                if not options:
+                    feedback = ("every proposal was rejected before simulation (fix these and follow the motion API "
+                                "rules exactly): " + " | ".join(r[:300] for r in rejected))
+                    continue
                 card, meta, rows, cands, tag = max(options, key=lambda o: (o[2][0]["success"], sum(r["success"] > 0 for r in o[2])))
                 if rows[0]["success"] == 0:
                     feedback = self.feedback(rows, tag)

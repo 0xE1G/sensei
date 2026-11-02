@@ -591,6 +591,40 @@ round started by the search (see status).
    clusters below 8 valid failures (crayon box, mouse, mug_ace...). Repair set 89 -> 105/160 (expert 148); test set
    39/80 -> 39/80 (expert 68): no test object falls in the two repaired groups' preconditions; nothing regressed.
    Standard tasks identical to baseline, smoke 30/30.
+8m. **Reorienting a held object: standing fallen objects up (2026-11-02)**:
+   - Scenes: task objects may carry `"pose": "lying"` (ObjectSpec.pose, not a template parameter, so no random draw of
+     existing probes changes): cylinder, cup, mug and imported loose objects are turned 90 deg about their local x axis,
+     centred and resting on the table (`templates._lay_down`, `lying_extent`); the placer uses the lying footprint and a
+     random direction. meta keeps the upright geometry (it describes the object once it stands) + `lying`.
+   - Motion API (fixed): `move(..., pitch=)` turns the hand about the line between the fingertips, so a held object turns
+     in place. Measured: a hand-down -> horizontal turn is reachable only in contorted wrist configurations the
+     incremental IK cannot get to (joint limit); about +-0.9 rad is reachable everywhere (documented in propose prompt v6).
+     Hand-written stand-in (`agents/jobs/reorient_motions.py`, also the oracle's `reference_stand_up`): grasp across the
+     middle with the hand tilted -45 deg, lift, turn to +45 deg, set down: 14/16 lying bottles.
+   - Upright check: objects with `symmetric_ends` (built-in cylinder) count as upright on either end (perception cannot
+     tell the ends apart; the first prototype "failed" 4/8 by standing bottles exactly upside down). Ground truth for any
+     loose object that is not standing now samples its true surface (`_primitive_surface` for box/cylinder/sphere geoms,
+     same height-map path as meshes); upright objects keep the template truth.
+   - Wiring: feasibility maps an `upright` goal to capability `stand_up` (missing -> missing_call -> SkillCreator, or the
+     motion card); CAPABILITIES["stand_up"]; named task `stand_up` (lying cylinder r 1.8-3.2 cm, h 8-16 cm, mass/friction
+     varied); task_spec prompt v9 + schema/validator accept pose "lying" (to_task keeps it: it was dropped at first, so a
+     typed request built an upright bottle and the skill knocked it over, 0/8); plan prompt v9 + rule stand-in write
+     use("stand_up", obj); the plan view shows pose. SkillCreator / SkillReviser: a proposal rejected by the validator is
+     recorded as a failed strategy and the round continues (it used to crash the run); if a whole round is rejected the
+     reasons go back as feedback.
+   - Results: rule backend (dry run) held-out 16/16 vs 0/16 (p 1.5e-05). Claude (runs/20261102-175247_create_stand_up,
+     789 trials, 8 min): round 1 = three strategies without turning the hand (grasp one end and tilt 1/3, scoop 0/3,
+     push one end 0/3), gate 0/16 -> REJECTED; revision with feedback = pinch near one end, lift, pitch about 85 deg, set
+     down -> search 25/41 settings work, tune 8/8, gate held-out 16/16 vs 0/16 (p 1.5e-05), regression pass -> PROMOTED
+     `skill_library/stand_up_pinch_flip_vertical.json`. (Its call records say propose prompt v5: the version line was
+     bumped only after the run; the content sent was v6.) Typed request "The bottle fell over on the table. Stand it back
+     up." (Claude spec + program) 8/8, expert 8/8. Unseen (test seeds 200000+, 8 each): bottles 8/8 (expert 5/8); lying
+     cups 0/8, mugs 0/8, scanned pill/soap bottles and supplement jar 1/8, lotion bottle 0/8 (expert 0-5/8). Cause: for
+     objects whose ends differ "upright" needs the base down, and no perceived feature says which end is the base (a
+     cup's open end, a bottle's cap): next gap, a perception feature, then the usual repair loop. Also not handled: a
+     stand_up call on an object that already stands knocks it over (the program should check first).
+   - Checks: standard tasks 36/36 identical vs the last commit (fixed seeds, success + sim time + labels); smoke 32/32
+     (new: lying bottle perceived with its length, truth agrees, feasibility asks for stand_up, stand-in stands it up).
 8e. **Base + user skill libraries** (user decision 2026-10-31, implement before the final commit): shipped
    `skill_library/` read-only; discoveries go to a local git-ignored user library merged by the loader; export/import
    skill packs; contribute back only after re-passing the gates. Today every discovery is written into the tracked

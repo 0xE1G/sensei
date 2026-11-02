@@ -22,6 +22,7 @@ import time
 
 import numpy as np
 
+from .agents.llm import ModelRejected
 from .runner import ROOT, TrialPool, trial_cfg, wilson
 from .search.explore import ALPHA, REGRESSION_TASKS, TUNE_PERTURB, mcnemar_p
 from .skills.library import LIB_DIR, save_card
@@ -46,6 +47,10 @@ CAPABILITIES = {
                    "description": "swing an open hinged door closed: move its handle along the arc around the hinge back "
                                   "towards the cabinet until it stops",
                    "program": "use('close_door', find_one(id='{obj}'))"},
+    "stand_up": {"kind": "stand_up",
+                 "description": "stand an object that lies on its side (fallen over) back up on one of its ends, "
+                                "where it lies; its long axis must end vertical",
+                 "program": "use('stand_up', find_one(id='{obj}'))"},
     "push": {"kind": "push",
              "description": "move an object along the table to a target location without grasping it (the object "
                             "cannot be grasped: no grasp in the library fits it)",
@@ -353,8 +358,16 @@ class SkillCreator:
                 # Round 2: one revision of the best, with what happened to it.
                 k = self.n_strategies if attempt == 1 else 1
                 options, others = [], []
+                rejected = []
                 for i in range(k):
-                    card, meta = self.propose(before, feedback, others or None)
+                    try:
+                        card, meta = self.propose(before, feedback, others or None)
+                    except ModelRejected as e:           # an invalid proposal is a failed strategy, not a crash
+                        rejected.append(str(e))
+                        self.report["phases"].setdefault("proposals", []).append(
+                            {"attempt": attempt, "option": i, "rejected": str(e), "feedback": feedback})
+                        _log(f"{'proposal'} {attempt}{'abc'[i] if k > 1 else ''} rejected: {str(e)[:200]}")
+                        continue
                     if card["name"] in [o[0]["name"] for o in options]:
                         card["name"] = f"{card['name']}_{i + 1}"
                     tag = f"{attempt}{'abc'[i]}" if k > 1 else str(attempt)
@@ -366,6 +379,10 @@ class SkillCreator:
                     rows, cands = self.search(card, tag)
                     options.append((card, meta, rows, cands, tag))
                     others.append(f"{card['name']}: {card['description'][:160]}")
+                if not options:
+                    feedback = ("every proposal was rejected before simulation (fix these and follow the motion API "
+                                "rules exactly): " + " | ".join(r[:300] for r in rejected))
+                    continue
                 # Best option: most successes of its best candidate, then how many candidates work at all.
                 card, meta, rows, cands, tag = max(options, key=lambda o: (o[2][0]["success"], sum(r["success"] > 0 for r in o[2])))
                 if k > 1:

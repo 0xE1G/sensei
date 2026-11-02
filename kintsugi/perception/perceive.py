@@ -153,6 +153,29 @@ def describe(points: np.ndarray, table_z: float = 0.0) -> dict | None:
     return d
 
 
+def _primitive_surface(gtype: int, size, rng, n: int = 8000) -> np.ndarray | None:
+    """Points spread over the surface of a box / cylinder / sphere geom, in the geom's frame."""
+    G = mujoco.mjtGeom
+    if gtype == G.mjGEOM_BOX:
+        h = np.asarray(size[:3], float)
+        pts = rng.uniform(-h, h, (n, 3))
+        areas = np.array([h[1] * h[2], h[0] * h[2], h[0] * h[1]])
+        ax = rng.choice(3, n, p=areas / areas.sum())
+        pts[np.arange(n), ax] = h[ax] * rng.choice([-1.0, 1.0], n)
+        return pts
+    if gtype == G.mjGEOM_CYLINDER:
+        r, hz = float(size[0]), float(size[1])
+        side = rng.random(n) < (2 * math.pi * r * 2 * hz) / (2 * math.pi * r * 2 * hz + 2 * math.pi * r * r)
+        th = rng.uniform(0, 2 * math.pi, n)
+        rr = np.where(side, r, r * np.sqrt(rng.random(n)))
+        z = np.where(side, rng.uniform(-hz, hz, n), hz * rng.choice([-1.0, 1.0], n))
+        return np.stack([rr * np.cos(th), rr * np.sin(th), z], axis=1)
+    if gtype == G.mjGEOM_SPHERE:
+        v = rng.normal(size=(n, 3))
+        return float(size[0]) * v / np.linalg.norm(v, axis=1, keepdims=True)
+    return None
+
+
 class Perception:
     def __init__(self, scene, mode: str = "sim", cameras=("front", "top"), width=320, height=240):
         self.scene, self.mode = scene, mode
@@ -232,7 +255,9 @@ class Perception:
                 out[k] = meta[k] + (float(pos[2]) if k in ("rim_z", "floor_z") else 0.0)
         if meta.get("articulated"):
             out["parts"] = self._truth_parts(oid)
-        elif meta.get("asset"):
+        elif meta.get("asset") or (not meta["fixed"] and R[2, 2] < math.cos(math.radians(25))):
+            # an imported mesh, or any object that is not standing (lying on its side, tipped over): the template's
+            # upright geometry does not describe it; use its true surface
             mesh = self._truth_mesh(oid)
             if mesh:
                 out.update(mesh)
@@ -248,21 +273,31 @@ class Perception:
         if oid not in cache:
             rng = np.random.default_rng(0)
             local = []
+            G = mujoco.mjtGeom
+            has_mesh = any(o == oid and m.geom_type[g] == G.mjGEOM_MESH and m.geom_group[g] <= 2
+                           for g, o in self.lut.items())
             for g, o in self.lut.items():
-                if o != oid or m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH or m.geom_group[g] > 2:
+                if o != oid or m.geom_group[g] > 2:
                     continue
-                mid = m.geom_dataid[g]
-                v = m.mesh_vert[m.mesh_vertadr[mid]:m.mesh_vertadr[mid] + m.mesh_vertnum[mid]].astype(float)
-                f = m.mesh_face[m.mesh_faceadr[mid]:m.mesh_faceadr[mid] + m.mesh_facenum[mid]]
-                a, b_, c = v[f[:, 0]], v[f[:, 1]], v[f[:, 2]]
-                area = 0.5 * np.linalg.norm(np.cross(b_ - a, c - a), axis=1)
-                if area.sum() <= 0:
+                if m.geom_type[g] == G.mjGEOM_MESH:
+                    mid = m.geom_dataid[g]
+                    v = m.mesh_vert[m.mesh_vertadr[mid]:m.mesh_vertadr[mid] + m.mesh_vertnum[mid]].astype(float)
+                    f = m.mesh_face[m.mesh_faceadr[mid]:m.mesh_faceadr[mid] + m.mesh_facenum[mid]]
+                    a, b_, c = v[f[:, 0]], v[f[:, 1]], v[f[:, 2]]
+                    area = 0.5 * np.linalg.norm(np.cross(b_ - a, c - a), axis=1)
+                    if area.sum() <= 0:
+                        continue
+                    k = rng.choice(len(f), 30000, p=area / area.sum())
+                    u, w = rng.random((2, len(k)))
+                    flip = u + w > 1
+                    u[flip], w[flip] = 1 - u[flip], 1 - w[flip]
+                    pts = a[k] + u[:, None] * (b_[k] - a[k]) + w[:, None] * (c[k] - a[k])
+                elif not has_mesh:                       # a primitive-shape object (built-in template)
+                    pts = _primitive_surface(int(m.geom_type[g]), m.geom_size[g], rng)
+                    if pts is None:
+                        continue
+                else:
                     continue
-                k = rng.choice(len(f), 30000, p=area / area.sum())
-                u, w = rng.random((2, len(k)))
-                flip = u + w > 1
-                u[flip], w[flip] = 1 - u[flip], 1 - w[flip]
-                pts = a[k] + u[:, None] * (b_[k] - a[k]) + w[:, None] * (c[k] - a[k])
                 # geom frame -> body frame (fixed for a rigid object)
                 Rg = d.geom_xmat[g].reshape(3, 3); Rb = d.xmat[b].reshape(3, 3)
                 local.append((pts @ Rg.T + d.geom_xpos[g] - d.xpos[b]) @ Rb)

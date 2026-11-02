@@ -77,14 +77,20 @@ def run_primitive(robot, code: str, obj: dict, target: dict | None, p: dict, on_
     stats = {"moves": 0, "reached": 0, "error": None, "finger_width_mm_while_moving": [],
              "part_motions": [], "hand_path_mm": []}     # proprioception: what the hand did, for feedback
 
-    def move(x, y, z, yaw=0.0, tilt=0.0, speed=0.2):
+    def move(x, y, z, yaw=0.0, tilt=0.0, speed=0.2, pitch=0.0):
+        """Hand to (x, y, z) pointing down, turned by yaw about the vertical. tilt leans the approach sideways (about
+        the hand's x axis); pitch turns the hand about the line between the fingertips (its y axis), so a held object
+        rotates in place: pitch = pi/2 ends with the hand horizontal, pointing along the yaw direction."""
         stats["moves"] += 1
         if stats["moves"] > MAX_MOVES:
             raise PrimitiveError(f"more than {MAX_MOVES} moves")
         z = max(0.008, float(z))                      # never drive the fingertips into the table
         t0 = robot.t
-        r = robot.move_to([float(x), float(y), z], down_rotation(float(yaw), tilt=float(tilt), tilt_axis="x"),
-                          speed=float(min(max(speed, 0.02), 0.5)))
+        R = down_rotation(float(yaw), tilt=float(tilt), tilt_axis="x")
+        if pitch:
+            pt = float(min(max(pitch, -math.pi / 2), math.pi / 2))
+            R = R @ np.array([[math.cos(pt), 0.0, math.sin(pt)], [0.0, 1.0, 0.0], [-math.sin(pt), 0.0, math.cos(pt)]])
+        r = robot.move_to([float(x), float(y), z], R, speed=float(min(max(speed, 0.02), 0.5)))
         if on_move:
             on_move(t0, robot.t)
         stats["reached"] += int(r["reached"])

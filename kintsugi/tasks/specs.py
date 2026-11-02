@@ -266,10 +266,21 @@ def close_door(seed=0) -> dict:
             "goal": [{"pred": "joint", "obj": "door", "op": "<=", "value": 10.0}]}
 
 
+def stand_up(seed=0) -> dict:
+    """A bottle (cylinder) lying on its side, anywhere in reach, any direction; stand it back up on one of its ends."""
+    rng = np.random.default_rng(seed)
+    p = {"radius": float(rng.uniform(0.018, 0.032)), "height": float(rng.uniform(0.08, 0.16)),
+         "mass": float(rng.uniform(0.05, 0.3)), "friction": float(rng.uniform(0.6, 1.2)), "color": "green"}
+    return {"name": "stand_up", "prompt": "Stand the bottle back up.",
+            "objects": [{"id": "bottle", "template": "cylinder", "role": "item", "pose": "lying", "params": p}],
+            "goal": [{"pred": "upright", "obj": "bottle"}], "constraints": []}
+
+
 TASKS = {"sort_by_color": sort_by_color, "balls_in_basket": balls_in_basket, "bowl_on_tray": bowl_on_tray,
          "cup_on_tray": cup_on_tray, "single_block": single_block, "sort_with_bowl": sort_with_bowl,
          "probe": probe, "stack_by_size": stack_by_size, "slide_plate": slide_plate,
-         "open_drawer": open_drawer, "open_door": open_door, "close_drawer": close_drawer, "close_door": close_door}
+         "open_drawer": open_drawer, "open_door": open_door, "close_drawer": close_drawer, "close_door": close_door,
+         "stand_up": stand_up}
 
 
 def make_task(name: str, seed: int = 0, isolate_obj: str | None = None, **kw) -> dict:

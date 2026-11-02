@@ -19,7 +19,7 @@ def oracle_library() -> dict:
 
 def reference_motions() -> dict:
     """Hand-written motions for capabilities no grasp covers, at their default parameters (never tuned, never
-    discovered): a two-finger push, and for every template with a moving part an opening motion by joint type
+    discovered): a two-finger push, standing a fallen object up, and for every template with a moving part an opening motion by joint type
     (slide -> straight pull, hinge -> arc around the hinge). With ground-truth parts they let the oracle judge
     push / open scenes instead of calling them unsolvable."""
     from .agents.jobs.open_motions import stand_in
@@ -29,7 +29,8 @@ def reference_motions() -> dict:
     def card(kind, prop):
         return {"name": f"reference_{kind}", "version": 1, "kind": kind, "impl": "generated", "code": prop["code"],
                 "params": prop["params"], "check": prop["check"], "source": "reference (hand-written)"}
-    cards = {"reference_push": card("push", _push_rule({}))}
+    from .agents.jobs.reorient_motions import stand_in as stand_up
+    cards = {"reference_push": card("push", _push_rule({})), "reference_stand_up": card("stand_up", stand_up())}
     for t, a in ARTICULATED.items():
         for verb in ("open", "close"):
             kind = f"{verb}_{a['part']}"

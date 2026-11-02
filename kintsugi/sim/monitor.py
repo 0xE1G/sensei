@@ -82,8 +82,11 @@ class Monitor:
         return math.degrees(q) if art["type"] == "hinge" else q
 
     def upright(self, oid, tol_deg=25) -> bool:
+        """Standing on its base, within tol_deg. An object whose ends are alike (a plain cylinder) also counts when it
+        stands on its other end: upside down it is the same shape."""
         R = self.scene.data.xmat[self.obj_body[oid]].reshape(3, 3)
-        return math.degrees(math.acos(np.clip(R[2, 2], -1, 1))) < tol_deg
+        c = abs(R[2, 2]) if self.scene.objects[oid].get("symmetric_ends") else R[2, 2]
+        return math.degrees(math.acos(np.clip(c, -1, 1))) < tol_deg
 
     def inside(self, oid, target) -> bool:
         """True if object `oid` rests in/on `target` (bowl, cup, mug, bin, tray, zone, or on top of a block,

@@ -19,7 +19,8 @@ def _task_view(task):
     from ...sim.templates import ARTICULATED
     return {"objects": [{"id": o["id"], "kind": o["template"], "role": o.get("role", "item"),
                          "params": o.get("params", {}),
-                         **({"moving_part": ARTICULATED[o["template"]]["part"]} if o["template"] in ARTICULATED else {})}
+                         **({"moving_part": ARTICULATED[o["template"]]["part"]} if o["template"] in ARTICULATED else {}),
+                         **({"pose": o["pose"]} if o.get("pose") else {})}
                         for o in task["objects"]],
             "goal": task["goal"], "constraints": task.get("constraints", []),
             **({"order": task["order"]} if task.get("order") else {})}
@@ -70,6 +71,8 @@ def rule(inputs) -> dict:
             from ...sim.templates import capability_for
             verb = "open" if g.get("op", ">=") == ">=" else "close"
             lines += [f'use("{capability_for(kinds.get(g["obj"], "part"), verb)}", find_one(id="{g["obj"]}"))']
+        elif g.get("pred") == "upright":                # standing a fallen object up is a motion too
+            lines += [f'use("stand_up", find_one(id="{g["obj"]}"))']
     for g in order:
         if kinds.get(g["obj"]) == "plate":            # no grasp lifts a plate: it needs a motion, not a pick
             lines += [f'use("push", find_one(id="{g["obj"]}"), find_one(id="{g["target"]}"))']

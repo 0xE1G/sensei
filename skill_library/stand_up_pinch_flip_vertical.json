@@ -1,0 +1,100 @@
+{
+  "name": "stand_up_pinch_flip_vertical",
+  "version": 1,
+  "kind": "stand_up",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    # Lying object: pinch one end from above, lift and rotate hand to flip vertical\n    cx, cy = obj['center']\n    yaw = obj['axis_yaw']\n    major = obj['extent_major']\n    minor = obj['extent_minor']\n    height = obj['height']\n    \n    # Choose which end to grasp (parameter selects end)\n    end_offset = p['end_choice'] * major / 2.0\n    grasp_x = cx + end_offset * cos(yaw)\n    grasp_y = cy + end_offset * sin(yaw)\n    \n    # Orient hand so fingers pinch across the minor axis\n    # Hand x-axis along long axis, fingers open/close perpendicular to it\n    grip_yaw = yaw\n    \n    open_gripper()\n    \n    # Approach from above\n    approach_z = height + p['approach_height']\n    move(grasp_x, grasp_y, approach_z, yaw=grip_yaw, speed=0.2)\n    \n    # Lower to grasp height (slightly above table to grip the cylinder)\n    grasp_z = height * p['grasp_height_ratio']\n    move(grasp_x, grasp_y, grasp_z, yaw=grip_yaw, speed=0.1)\n    \n    # Close to pinch the end\n    close_gripper(force=p['grip_force'])\n    wait(0.3)\n    \n    if not holding():\n        return False\n    \n    # Lift up while keeping horizontal\n    lift_z = p['lift_height']\n    move(grasp_x, grasp_y, lift_z, yaw=grip_yaw, pitch=0.0, speed=0.08)\n    wait(0.2)\n    \n    # Now rotate the hand to flip object vertical\n    # Pitch rotates about the line between fingertips\n    # Positive pitch swings the object up along the hand's x direction\n    flip_pitch = p['flip_angle']\n    move(grasp_x, grasp_y, lift_z, yaw=grip_yaw, pitch=flip_pitch, speed=0.06)\n    wait(0.3)\n    \n    # Move to where the object's base should touch down\n    # After flipping, the object extends down from the gripper\n    # Estimate how far below the TCP the bottom will be\n    set_down_z = p['set_down_height']\n    move(grasp_x, grasp_y, set_down_z, yaw=grip_yaw, pitch=flip_pitch, speed=0.05)\n    wait(0.2)\n    \n    # Release\n    open_gripper()\n    wait(0.2)\n    retreat(dz=0.1)\n    \n    return True",
+  "description": "Pinch one end of the lying object from above, lift it, then rotate the hand 90 degrees using pitch to flip the object vertical, and lower it to stand on its end.",
+  "check": "object is upright (height increased significantly, width decreased)",
+  "params": {
+    "end_choice": {
+      "default": 0.2835,
+      "range": [
+        -1.0,
+        1.0
+      ],
+      "meaning": "which end to grasp: -1 or +1"
+    },
+    "approach_height": {
+      "default": 0.0845,
+      "range": [
+        0.05,
+        0.15
+      ],
+      "meaning": "height above object to approach from (m)"
+    },
+    "grasp_height_ratio": {
+      "default": 0.5799,
+      "range": [
+        0.3,
+        0.8
+      ],
+      "meaning": "fraction of object height to grasp at"
+    },
+    "grip_force": {
+      "default": 15.538,
+      "range": [
+        15.0,
+        40.0
+      ],
+      "meaning": "gripper force when pinching (N)"
+    },
+    "lift_height": {
+      "default": 0.1844,
+      "range": [
+        0.1,
+        0.25
+      ],
+      "meaning": "how high to lift before flipping (m)"
+    },
+    "flip_angle": {
+      "default": 1.4884,
+      "range": [
+        1.0,
+        1.57
+      ],
+      "meaning": "pitch angle to flip object vertical (radians, ~90 deg)"
+    },
+    "set_down_height": {
+      "default": 0.0555,
+      "range": [
+        0.05,
+        0.12
+      ],
+      "meaning": "TCP height when setting object down (m)"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261102-175247_create_stand_up",
+      "date": "2026-11-02",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "claude_cli",
+        "model": "sonnet",
+        "prompt_version": "5",
+        "input_hash": "3a55c97c845d",
+        "cached": false,
+        "repairs": 0,
+        "latency_s": 25.07
+      },
+      "attempts": 2,
+      "capability": "stand_up",
+      "task": "stand_up",
+      "task_spec": null,
+      "program": "use('stand_up', find_one(id='bottle'))",
+      "description": "stand an object that lies on its side (fallen over) back up on one of its ends, where it lies; its long axis must end vertical",
+      "trials_simulated": 789,
+      "results": {
+        "held_out": [
+          0,
+          16,
+          16
+        ],
+        "p_value": 1.5e-05
+      }
+    }
+  ]
+}

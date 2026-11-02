@@ -56,7 +56,7 @@ def assess(task: dict, percepts: dict, cards: dict, allowed=None) -> list[dict]:
             continue
         if pred in ("joint", "distance", "height", "upright"):
             kind = (capability_for(templates[obj], "open" if g.get("op", ">=") == ">=" else "close")
-                    if pred == "joint" else None)
+                    if pred == "joint" else "stand_up" if pred == "upright" else None)
             have = motion_cards(cards, kind) if kind else []
             out.append({**v, "verdict": "motion" if have else "missing", "capability": kind, "skills": have,
                         "reason": (f"moves its part with {have[0]}" if have else
