@@ -178,60 +178,81 @@ All numbers are measured in simulation on fixed seeds, with held-out objects nev
 
 ## Setup
 
-**You need:** Python 3.11, Node.js 18 or newer, git, about 1 GB of disk, and (for the Meta models) a Meta Model API
-key. Windows, macOS or Linux; no GPU.
+About 10 minutes. Works on Windows, macOS and Linux, on an ordinary laptop: no GPU.
 
-### 1 · Get the code and a Python environment
+**Install first** (once): [Python 3.11](https://www.python.org/downloads/release/python-3119/) (on Windows, tick
+*Add python.exe to PATH* in the installer), [Node.js](https://nodejs.org/) (the LTS version) and
+[git](https://git-scm.com/downloads). For the Meta models you also need a Meta Model API key; without one, the app
+still runs the standard tasks with built-in rules.
+
+Run the commands below in a terminal (on Windows: *PowerShell*), one line at a time.
+
+### 1 · Get the code
 
 ```bash
 git clone https://github.com/0xE1G/sensei.git kintsugi
 cd kintsugi
 ```
 
-With conda:
+### 2 · Create a Python environment
 
-```bash
-conda create -n kintsugi python=3.11 -y
-conda activate kintsugi
+**Windows (PowerShell):**
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
-Or with a plain virtual environment:
+**macOS / Linux:**
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python3.11 -m venv .venv
+source .venv/bin/activate
 ```
 
-### 2 · Install and download the robot
+Your prompt now starts with `(.venv)`. Activate it again (the second line) in every new terminal. With conda instead:
+`conda create -n kintsugi python=3.11 -y` then `conda activate kintsugi`.
+
+### 3 · Install, and download the robot
 
 ```bash
 pip install -r requirements.txt
-python scripts/fetch_assets.py              # the Franka Panda model from MuJoCo Menagerie
-python scripts/fetch_assets.py --scanned    # optional: 32 scanned household objects (~50 MB)
-python scripts/smoke_test.py                # about a minute; ends with "32/32 passed"
+python scripts/fetch_assets.py
+python scripts/smoke_test.py
 ```
 
-### 3 · Start the app
+The second line downloads the Franka Panda robot model (MuJoCo Menagerie). The last one checks everything in about a
+minute and ends with a line like `31/31 passed` (32/32 once the scanned objects are downloaded). Optional: `python scripts/fetch_assets.py --scanned` adds 32 scanned
+household objects (~50 MB); the app can also download them later from **Settings → Downloads**.
 
-Build the web app once, then one command runs everything:
+### 4 · Build the web app (once)
 
 ```bash
-cd web && npm install && npm run build && cd ..
+cd web
+npm install
+npm run build
+cd ..
+```
+
+### 5 · Start Kintsugi
+
+```bash
 python -m uvicorn server.app:app --port 8000
 ```
 
-Open **http://localhost:8000**.
+Open **http://localhost:8000** in your browser. To stop it, press `Ctrl+C` in the terminal. Next time you only need
+`cd kintsugi`, the activate line from step 2, and this command.
 
 <details>
 <summary>Developing the web app instead (hot reload, two terminals)</summary>
 
 ```bash
 python -m uvicorn server.app:app --port 8000     # terminal 1: the API and the simulation jobs
-cd web && npm install && npm run dev             # terminal 2: open http://localhost:5173
+cd web; npm run dev                              # terminal 2: open http://localhost:5173
 ```
 </details>
 
-### 4 · Add your Meta Model API key
+### 6 · Add your Meta Model API key
 
 Click **Settings** (top right), paste your key under **Meta Model API → API key**, click **Save**, then
 **Test connection**. The address (`https://api.meta.ai/v1`) and the model (`muse-spark-1.3`) are already filled in;
@@ -245,28 +266,33 @@ environment instead (it then wins over the settings file):
 
 ```bash
 export META_API_KEY="your-key"                 # Windows PowerShell: $env:META_API_KEY = "your-key"
-export META_MODEL="muse-spark-1.3"             # optional
 ```
 
 **No key yet?** Choose **Offline rules** in Settings to try the standard tasks with built-in rules and no model calls.
 
-### 5 · Try it
+### 7 · Try it
 
 1. In the **Studio**, type `Sort the blocks and the bowl onto the trays of the same colour.` and press **Enter**.
    Muse Spark writes the task and the plan; check the 3D preview, then click **Run**.
 2. Click **Photo** and attach a picture of a table with a few objects; leave the request empty and Muse Spark proposes
    one.
-3. Try `Open the cabinet door.` With **Fix failures automatically** on (the default), the robot creates the missing skill (about 15 minutes on
-   a laptop) and runs the task again.
+3. Try `Open the cabinet door.` With **Fix failures automatically** on (the default), the robot creates the missing
+   skill (about 15 minutes on a laptop) and runs the task again.
 4. Open **Episodes** to replay any scene, **Investigator** to read every diagnosis, and **Skills** to see each skill
    with its evidence and history.
 
 ### Troubleshooting
 
-- **Headless Linux:** set `MUJOCO_GL=egl` (or run under `xvfb-run -a` with `MUJOCO_GL=glfw`).
+- **Windows: "running scripts is disabled on this system"** when activating: run
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in PowerShell, then activate again. Or use
+  `.venv\Scripts\activate.bat` in *Command Prompt* instead.
+- **`py -3.11` or `python3.11` not found:** Python 3.11 is not installed (Kintsugi is tested on 3.11). Install it
+  from the link above, or use conda.
+- **The page says "Not Found":** the web app is not built yet; run step 4, then restart step 5.
 - **Port 8000 busy:** use `--port 8001` and open that port instead.
 - **Slow on a small machine:** lower **In parallel** in the Studio's run settings (default: CPU cores − 1, at most 8).
 - **"Test connection" fails:** check the key, and that your key lists the model ID shown under *Advanced*.
+- **Headless Linux:** set `MUJOCO_GL=egl` (or run under `xvfb-run -a` with `MUJOCO_GL=glfw`).
 
 ## Architecture
 

@@ -12,6 +12,7 @@ import base64
 import functools
 import gzip
 import json
+import mimetypes
 import pathlib
 import re
 
@@ -25,6 +26,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNS = ROOT / "runs"
 LIB = ROOT / "skill_library"            # base library (shipped); local discoveries live in the user library
 WEB_DIST = ROOT / "web" / "dist"
+# Windows can map .js to text/plain in the registry, which mimetypes follows; browsers then refuse the app's module
+# scripts and the page stays blank. Pin the web types.
+for _ext, _type in ((".js", "text/javascript"), (".mjs", "text/javascript"), (".css", "text/css"), (".svg", "image/svg+xml")):
+    mimetypes.add_type(_type, _ext)
 
 app = FastAPI(title="Kintsugi")
 app.add_middleware(GZipMiddleware, minimum_size=2000)
