@@ -98,6 +98,22 @@
    ]
   }
  },
+ "close_drawer": {
+  "solid-wide-short": {
+   "sources": [
+    "head_to_head 2026-11-03 (16 fresh scenes, seeds 900-915)"
+   ],
+   "success": 2,
+   "trials": 2
+  },
+  "solid-wide-tall": {
+   "sources": [
+    "head_to_head 2026-11-03 (16 fresh scenes, seeds 900-915)"
+   ],
+   "success": 14,
+   "trials": 14
+  }
+ },
  "open_drawer": {
   "solid-wide-tall": {
    "sources": [
@@ -114,6 +130,15 @@
    ],
    "success": 32,
    "trials": 32
+  }
+ },
+ "push_closed_side_blade": {
+  "solid-wide-short": {
+   "sources": [
+    "head_to_head 2026-11-03 (16 fresh scenes, seeds 900-915)"
+   ],
+   "success": 16,
+   "trials": 16
   }
  },
  "rim_pinch": {
@@ -256,6 +281,22 @@
    ],
    "success": 0,
    "trials": 24
+  }
+ },
+ "stand_up_center_air_rotate": {
+  "solid-wide-short": {
+   "sources": [
+    "head_to_head 2026-11-03 (16 fresh scenes, seeds 900-915)"
+   ],
+   "success": 4,
+   "trials": 4
+  },
+  "solid-wide-short-long": {
+   "sources": [
+    "head_to_head 2026-11-03 (16 fresh scenes, seeds 900-915)"
+   ],
+   "success": 12,
+   "trials": 12
   }
  },
  "top_grasp": {

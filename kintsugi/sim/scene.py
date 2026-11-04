@@ -170,8 +170,17 @@ def build_scene(task: dict, seed: int = 0, positions: dict | None = None, pertur
     except Exception:
         pass
     wb = spec.worldbody
-    wb.add_geom(name="table", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1.5, 1.5, 0.05],
-                rgba=[0.82, 0.78, 0.72, 1], friction=[1.0, 0.005, 0.0001])
+    table = wb.add_geom(name="table", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1.5, 1.5, 0.05],
+                        rgba=[0.82, 0.78, 0.72, 1], friction=[1.0, 0.005, 0.0001])
+    if task.get("table_texture"):                    # a photo's twin: its real tabletop, appearance only
+        from ..runner import ROOT
+        tex = ROOT / task["table_texture"]
+        if tex.exists():
+            spec.add_texture(name="table_tex", type=mujoco.mjtTexture.mjTEXTURE_2D, file=str(tex))
+            mat = spec.add_material(name="table_mat", texrepeat=[1.25, 1.25], texuniform=True)
+            mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "table_tex"
+            table.material = "table_mat"
+            table.rgba = [1, 1, 1, 1]
     wb.add_light(name="key", pos=[0.6, -0.4, 2.0], dir=[-0.1, 0.2, -1], diffuse=[0.7, 0.7, 0.7],
                  specular=[0.2, 0.2, 0.2], castshadow=True)
     wb.add_light(name="fill", pos=[1.2, 0.6, 1.5], dir=[-0.6, -0.3, -1], diffuse=[0.35, 0.35, 0.35],

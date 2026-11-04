@@ -27,7 +27,9 @@ def _log(msg):
     print(f"[auto_repair] {msg}", flush=True)
 
 
-def collect_failures(run_dirs, tag=None) -> list[dict]:
+def collect_failures(run_dirs, tag=None, all_steps=False) -> list[dict]:
+    """Failed steps of failed episodes: the first one per episode, or every one (all_steps; each is still kept only if
+    the expert's exact replay solves that item, so a step that failed because an earlier one did is dropped)."""
     out = []
     for d in run_dirs:
         for p in sorted(pathlib.Path(d).glob("trials/*.json")):
@@ -44,7 +46,8 @@ def collect_failures(run_dirs, tag=None) -> list[dict]:
                                 "group": _group(st),
                                 "skill": st["trace"][0]["skill"], "label": st["label"], "source": str(p),
                                 "perturb": rec.get("perturb")})
-                    break                                     # the first failed step of the episode
+                    if not all_steps:
+                        break                                 # the first failed step of the episode
     return out
 
 
@@ -110,8 +113,10 @@ def repair_target(cluster, peers=None):
 
 
 def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8, dry_run=False, run_id=None,
-                tag=None, explorer_kwargs=None):
-    """explorer_kwargs: passed to every Explorer (e.g. {"min_fail_rate": 0.1} to skip rare failures)."""
+                tag=None, explorer_kwargs=None, all_steps=False):
+    """explorer_kwargs: passed to every Explorer (e.g. {"min_fail_rate": 0.1} to skip rare failures).
+    all_steps: consider every failed step of an episode, not only the first (the Studio: a photo's scene can mix an
+    item the expert cannot do with one it can)."""
     from .agents.llm import ModelClient
     from .investigate import Investigator
     from .search.explore import Explorer
@@ -120,12 +125,16 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
     out = ROOT / "runs" / run_id
     out.mkdir(parents=True, exist_ok=True)
     report = {"run_id": run_id, "inputs": [str(d) for d in run_dirs], "clusters": []}
-    fails = collect_failures(run_dirs, tag)
-    _log(f"{len(fails)} failed episodes in {len(run_dirs)} run(s)")
+    fails = collect_failures(run_dirs, tag, all_steps=all_steps)
+    _log(f"{len(fails)} failed {'steps' if all_steps else 'episodes'} in {len(run_dirs)} run(s)")
 
-    # Oracle: replay each failing scene exactly; keep only failures it can solve.
-    jobs = []
-    for i, f in enumerate(fails):
+    # Oracle: replay each failing scene exactly (once per episode); keep only failures it can solve.
+    jobs, replay_of = [], {}
+    for f in fails:
+        if f["source"] in replay_of:
+            continue
+        i = len(jobs)
+        replay_of[f["source"]] = f"replay{i}"
         cfg = trial_cfg("spec", out, tag=f"replay{i}", save_failures=False, success_sample=0, save_video=False,
                         save_poses=False, task_spec={k: v for k, v in f["spec"].items()}, oracle="on_failure",
                         perturb=f["perturb"])
@@ -133,8 +142,8 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
     with TrialPool(workers) as pool:
         res = {r["tag"]: r for r in pool.map(jobs)}
     valid = []
-    for i, f in enumerate(fails):
-        r = res[f"replay{i}"]
+    for f in fails:
+        r = res[replay_of[f["source"]]]
         if not r["success"] and r["oracle"] and r["oracle"]["subtask_ok"].get(f["obj"]):
             valid.append(f)
     groups = collections.defaultdict(list)
@@ -186,6 +195,7 @@ def auto_repair(run_dirs, workers=None, client=None, min_failures=8, max_cases=8
         _log(f"cluster {kind}/{skill} ({len(cl)} failures, {entry['labels']}): {len(hints)} confirmed fixes; "
              f"explorer on {task} {entry['repair_target']['kwargs']}")
         ex = Explorer(task, workers=workers, task_kwargs=kw, hints=hints, perturb=cl[0]["perturb"],
+                      focus=(cl[0]["obj"], skill),                 # repair this cluster's item, not the largest one
                       run_id=f"{run_id}/explore_{kind.replace(':', '-')}_{skill}", **(explorer_kwargs or {}))
         if dry_run:
             ex.promote = lambda card, *a: ex.report.update(promoted={"card": card, "dry_run": True})

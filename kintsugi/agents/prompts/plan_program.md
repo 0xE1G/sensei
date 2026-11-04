@@ -1,4 +1,4 @@
-version: 9
+version: 10
 You write a short Python program that makes a simulated robot arm (Franka Panda, parallel gripper) do a tabletop
 task. The program calls a small API; it never controls motors. Grasping, lifting and placing are verified skills
 that already exist: the robot chooses the best grasp for each object itself unless you name one. Answer with ONE
@@ -35,7 +35,8 @@ Rules:
 - Order matters: build stacks from the bottom up; an object you will still move must not be buried. If the task
   has an "order", reach the goals in exactly that sequence (success is checked in that order).
 - Always check what pick returns. If a pick fails, retry once with grasp=next_best_grasp(obj) if there is one;
-  if it still fails and has_skill("push") and the target is a zone or tray, push(obj, target) instead.
+  if it still fails and has_skill("push") and the target is a flat zone, push(obj, target) instead. Never push
+  onto a tray, bin, bowl or cup: their raised edge stops a pushed object.
 - If no grasp can lift an object at all (e.g. a wide flat plate), go straight to the capability it needs.
 - A "joint" goal (open or close a drawer or door) is a motion, not a pick, named after the object's moving part:
   use("open_drawer", obj) / use("open_door", obj) / use("close_drawer", obj) ... where drawer/door is the object's

@@ -456,6 +456,28 @@ def studio_spec(body: dict = Body(...)):
     return plan_spec(body["prompt"], body.get("backend"))
 
 
+@app.post("/api/studio/photo_spec")
+def studio_photo_spec(body: dict = Body(...)):
+    """A photo of a real table (data URL) + an optional request -> task spec with the photo's layout + preview."""
+    from kintsugi.studio import plan_photo
+    m = re.fullmatch(r"data:image/(png|jpe?g|webp);base64,(.+)", body.get("image") or "", re.S)
+    if not m:
+        raise HTTPException(400, "image must be a PNG, JPEG or WebP data URL")
+    raw = base64.b64decode(m.group(2))
+    if len(raw) > 15_000_000:
+        raise HTTPException(413, "photo larger than 15 MB")
+    d = RUNS / "twins" / time.strftime("%Y%m%d-%H%M%S")
+    d.mkdir(parents=True, exist_ok=True)
+    src = d / f"upload.{'jpg' if m.group(1).startswith('jp') else m.group(1)}"
+    src.write_bytes(raw)
+    out = plan_photo(src, body.get("prompt") or "", body.get("backend"))
+    tw = out.get("twin") or {}
+    for k in ("photo", "overlay"):                   # paths for /api/image (relative to runs/)
+        if tw.get(k):
+            tw[k] = str(pathlib.Path(tw[k]).relative_to("runs")).replace("\\", "/")
+    return out
+
+
 @app.post("/api/studio/program")
 def studio_program(body: dict = Body(...)):
     from kintsugi.studio import plan_program
@@ -619,10 +641,12 @@ _dl = {"which": None, "done": 0, "total": 0, "label": "", "error": None, "finish
 @app.get("/api/settings")
 def get_settings():
     from kintsugi import settings
-    from kintsugi.perception.sam import availability
+    from kintsugi.perception.sam import availability, boxes_available
     ok, why = availability()
+    pok, pwhy = boxes_available()                    # photos: SAM 3.1 boxes + Muse Image (Meta key, or SAM's own)
     return {**settings.public(), "claude_cli_found": bool(shutil.which("claude")),
-            "sam": {"available": ok, "reason": why}, "config_file": "config/local.json"}
+            "sam": {"available": ok, "reason": why}, "photo": {"available": pok, "reason": pwhy},
+            "config_file": "config/local.json"}
 
 
 @app.post("/api/settings")

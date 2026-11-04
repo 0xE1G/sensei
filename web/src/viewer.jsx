@@ -82,16 +82,28 @@ function geomGeometry(g, meshes) {
 // surface exactly at z = 0, so every object and the robot base rest where the physics has them. Nothing here
 // reaches the simulation, its cameras or perception.
 const BENCH = { x: [-0.38, 0.98], y: [-0.78, 0.78], top: 0.045, height: 0.76, leg: 0.05, inset: 0.07 };
-function Workbench() {
+// texture: a photo's empty tabletop (runs/... path, made by Muse Image); tiled across the worktop.
+function Workbench({ texture }) {
   const { x, y, top, height, leg, inset } = BENCH;
   const cx = (x[0] + x[1]) / 2, cy = (y[0] + y[1]) / 2, w = x[1] - x[0], d = y[1] - y[0];
+  const map = useMemo(() => {
+    if (!texture) return null;
+    const path = texture.replace(/\\/g, "/").replace(/^runs\//, "");
+    const t = new THREE.TextureLoader().load(`/api/image?path=${encodeURIComponent(path)}`);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;        // the image is a mirrored 2 x 2 tile: seamless
+    t.repeat.set(w / 0.8, d / 0.8);                  // one image ~ 80 cm of table, as in the simulation
+    // the texture is stored turned so that u runs along +x (away from the robot), like the worktop's own UVs
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [texture, w, d]);
   const mats = useMemo(() => ({
-    top: new THREE.MeshStandardMaterial({ color: "#d9d5ce", roughness: 0.85, metalness: 0.0 }),
+    top: map ? new THREE.MeshStandardMaterial({ map, roughness: 0.8, metalness: 0.0 })
+      : new THREE.MeshStandardMaterial({ color: "#d9d5ce", roughness: 0.85, metalness: 0.0 }),
     edge: new THREE.MeshStandardMaterial({ color: "#5b5650", roughness: 0.6, metalness: 0.1 }),
     steel: new THREE.MeshStandardMaterial({ color: "#3b3f45", roughness: 0.45, metalness: 0.6 }),
     shelf: new THREE.MeshStandardMaterial({ color: "#8f8a83", roughness: 0.8 }),
     floor: new THREE.MeshStandardMaterial({ color: "#2a2c30", roughness: 1.0 }),
-  }), []);
+  }), [map]);
   const legH = height - top;
   const legs = [[x[0] + inset, y[0] + inset], [x[0] + inset, y[1] - inset], [x[1] - inset, y[0] + inset], [x[1] - inset, y[1] - inset]];
   return (
@@ -276,7 +288,7 @@ export function Viewer({ scene, meshes: robotMeshes, pose, height = 520, zoom = 
         <ambientLight intensity={0.55} />
         <directionalLight position={[1.2, -0.8, 2.2]} intensity={1.2} castShadow shadow-mapSize={[2048, 2048]} />
         <directionalLight position={[-1, 1, 1.5]} intensity={0.35} />
-        {scene && <Workbench />}
+        {scene && <Workbench texture={scene.table_texture} />}
         {scene && meshes && <SceneObjects scene={scene} meshes={meshes} pose={pose} />}
         <OrbitControls target={[0.4, 0, 0.2]} enableZoom={zoom} makeDefault />
         <RobotCameras scene={scene} pose={pose} show={showCams && !!scene} />

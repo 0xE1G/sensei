@@ -35,6 +35,8 @@ MAX_LINES = 50_000
 MAX_SKILL_CALLS = 40
 
 
+RAISED_TARGETS = {"tray", "bin", "bowl", "cup"}     # targets with a lip or walls: nothing can be pushed onto them
+
 class ProgramError(Exception):
     pass
 
@@ -244,6 +246,10 @@ def run_program(ep, code: str) -> dict:
             raise ProgramError(f"{capability} needs an empty gripper; place what you are holding first")
         oid = _id(obj)
         tid = _id(target) if target is not None else None
+        if capability == "push" and tid is not None:   # sliding cannot lift an object over a raised edge
+            tt = next((o["template"] for o in ep.task["objects"] if o["id"] == tid), None)
+            if tt in RAISED_TARGETS:
+                raise ProgramError(f"push can only slide an object onto a flat zone; {tid} is a {tt} with a raised edge")
         cands = [n for n, c in ep.cards.items() if c.get("kind") == capability and c.get("impl") == "generated"]
         if not cands:
             state["missing_call"] = {"capability": capability, "obj": oid, "target": tid}

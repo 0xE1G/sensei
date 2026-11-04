@@ -88,8 +88,9 @@ def render(inputs):
     return _SYSTEM.replace("{catalog}", catalog_text()), _USER.replace("{prompt}", inputs["prompt"].strip())
 
 
-def validate(out, inputs) -> list[str]:
-    """Checks beyond the schema. Every message says what to change, since it is fed back to the model."""
+def validate(out, inputs, build: bool = True) -> list[str]:
+    """Checks beyond the schema. Every message says what to change, since it is fed back to the model.
+    build=False skips the random-layout check (a photo's twin places the objects where the photo shows them)."""
     st = out["status"]
     if st == "clarify":
         return [] if out.get("question", "").strip() else ["status clarify needs a non-empty 'question'"]
@@ -163,7 +164,7 @@ def validate(out, inputs) -> list[str]:
                 errs.append(f"'order' item '{i}' has no goal; list only goal items, in the required sequence")
         if len(order) < 2:
             errs.append("'order' needs at least two items (omit it when there is no sequence)")
-    if errs:
+    if errs or not build:
         return errs
     # The placer must be able to lay the scene out (reach, no overlaps).
     from ...sim.scene import build_scene

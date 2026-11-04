@@ -1,0 +1,128 @@
+{
+  "name": "close_drawer",
+  "version": 1,
+  "kind": "close_drawer",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    has_parts = 'parts' in obj\n    has_front = 0\n    has_handle = 0\n    if has_parts:\n        if 'front' in obj['parts']:\n            has_front = 1\n        if 'handle' in obj['parts']:\n            has_handle = 1\n    nx = 0.0\n    ny = 0.0\n    rx = 0.0\n    ry = 0.0\n    rz = 0.0\n    if has_handle == 1:\n        part = obj['parts']['handle']\n        nx = part['normal'][0]\n        ny = part['normal'][1]\n        nl = hypot(nx, ny)\n        if nl > 0.0001:\n            nx = nx / nl\n            ny = ny / nl\n        if 'tip' in part:\n            rx = part['tip'][0]\n            ry = part['tip'][1]\n            rz = part['tip'][2]\n        else:\n            rx = part['center'][0]\n            ry = part['center'][1]\n            rz = part['center'][2]\n    else:\n        if has_front == 1:\n            part2 = obj['parts']['front']\n            nx = part2['normal'][0]\n            ny = part2['normal'][1]\n            nl2 = hypot(nx, ny)\n            if nl2 > 0.0001:\n                nx = nx / nl2\n                ny = ny / nl2\n            rx = part2['center'][0]\n            ry = part2['center'][1]\n            rz = part2['center'][2]\n        else:\n            cx0 = obj['center'][0]\n            cy0 = obj['center'][1]\n            d0 = hypot(cx0, cy0)\n            if d0 < 0.0001:\n                nx = -1.0\n                ny = 0.0\n            else:\n                nx = -cx0 / d0\n                ny = -cy0 / d0\n            w0 = obj['width']\n            rx = cx0 + nx * w0 * 0.5\n            ry = cy0 + ny * w0 * 0.5\n            rz = obj['top_z'] * 0.5\n    yaw = atan2(ny, nx)\n    ix = -nx\n    iy = -ny\n    pz = rz + p['tool_lift']\n    if pz < 0.02:\n        pz = 0.02\n    px = rx + nx * p['contact_gap']\n    py = ry + ny * p['contact_gap']\n    pre_d = p['pre_dist']\n    pre_x = rx + nx * pre_d\n    pre_y = ry + ny * pre_d\n    pre_z = pz + p['approach_lift']\n    if has_handle == 1:\n        close_gripper()\n    else:\n        open_gripper()\n    move(pre_x, pre_y, pre_z, yaw=yaw, speed=p['approach_speed'])\n    move(px, py, pz, yaw=yaw, speed=p['approach_speed'])\n    move_linear(ix, iy, dz=0.0, dist=p['push_dist'], speed=p['push_speed'], until_stall=1, stall_lag=0.012)",
+  "description": "Align hand x with outward normal for wide stable push, start just outside handle tip or front center, then drive inward with move_linear until stall at the closed end stop.",
+  "check": "look() shows front/handle displaced inward along -normal and drawer joint <= 0.01 (front flush, no open gap)",
+  "params": {
+    "pre_dist": {
+      "default": 0.12,
+      "range": [
+        0.05,
+        0.2
+      ],
+      "meaning": "standoff outward along front normal for collision-free approach"
+    },
+    "contact_gap": {
+      "default": 0.025,
+      "range": [
+        0.005,
+        0.06
+      ],
+      "meaning": "gap outward from handle tip or front center where push starts"
+    },
+    "tool_lift": {
+      "default": 0.012,
+      "range": [
+        0.0,
+        0.04
+      ],
+      "meaning": "tool point height above part ref z so fingertips overlap front"
+    },
+    "approach_lift": {
+      "default": 0.08,
+      "range": [
+        0.03,
+        0.15
+      ],
+      "meaning": "height of pre-approach above push height"
+    },
+    "push_dist": {
+      "default": 0.3,
+      "range": [
+        0.15,
+        0.45
+      ],
+      "meaning": "max inward travel along -normal, stall stops at closed end stop"
+    },
+    "push_speed": {
+      "default": 0.08,
+      "range": [
+        0.03,
+        0.15
+      ],
+      "meaning": "speed of inward push"
+    },
+    "approach_speed": {
+      "default": 0.2,
+      "range": [
+        0.1,
+        0.3
+      ],
+      "meaning": "speed of approach moves"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261102-215706_eval_skills/spark_close_drawer",
+      "date": "2026-11-02",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "spark",
+        "model": "muse-spark-1.3-contributor",
+        "prompt_version": "7",
+        "input_hash": "22c7f1b839c3",
+        "cached": false,
+        "repairs": 0,
+        "usage": {
+          "prompt_tokens": 2053,
+          "completion_tokens": 7557
+        },
+        "latency_s": 88.02
+      },
+      "attempts": 1,
+      "capability": "close_drawer",
+      "task": "close_drawer",
+      "task_spec": null,
+      "program": "use('close_drawer', find_one(id='drawer'))",
+      "description": "push an open drawer closed: slide it back in along the front's inward normal (against the outward normal) until it stops",
+      "trials_simulated": 522,
+      "results": {
+        "held_out": [
+          0,
+          14,
+          16
+        ],
+        "p_value": 6.1e-05
+      },
+      "note": "created in the 2026-11-02 Spark evaluation (dry run), added to the user library 2026-11-03"
+    },
+    {
+      "version": 1,
+      "source": "contribution",
+      "date": "2026-11-04",
+      "run_id": "20261104-054226_reverify_base",
+      "gate": {
+        "requests": {
+          "close_drawer": {
+            "with": [
+              16,
+              16
+            ],
+            "without": [
+              0,
+              16
+            ],
+            "mode": "improve",
+            "p": 1.5e-05
+          }
+        },
+        "regression_pass": true
+      }
+    }
+  ]
+}

@@ -102,7 +102,7 @@ class ModelClient:
             raise ValueError(f"Unknown backend '{self.backend}'. Known: {BACKENDS}")
         self.model = model or (settings.get("meta_model") if self.backend == "spark" else None) or DEFAULT_MODEL[self.backend]
         self.dry_run = bool(int(os.environ.get("KINTSUGI_LLM_DRYRUN", "0"))) if dry_run is None else dry_run
-        self.use_cache = use_cache
+        self.use_cache = use_cache and os.environ.get("KINTSUGI_NO_CACHE", "0") != "1"   # repeats re-ask the model
         self.fallback = (settings.get("spark_fallback", "1") != "0") if fallback is None else bool(fallback)
         if effort is None and os.environ.get("KINTSUGI_SPARK_EFFORT"):
             effort = os.environ["KINTSUGI_SPARK_EFFORT"]

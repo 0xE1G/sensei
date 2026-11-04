@@ -40,12 +40,13 @@ def main() -> int:
     ap.add_argument("--library", choices=["current", "seed"], default="current")
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--split", choices=["all", "repair", "test"], default="all")
+    ap.add_argument("--seed0", type=int, default=0, help="first seed index within the split (repeats use others)")
     a = ap.parse_args()
     catalogue = json.loads(CATALOGUE.read_text())["objects"] if CATALOGUE.exists() else {}
     names = a.objects or [k for k in catalogue if k in assets() and k not in FIXED_BY_DEFAULT]
     if a.split != "all":
         names = [k for k in names if k in SPLITS["scanned_objects"][a.split]]
-    seeds = split_seeds("test" if a.split == "test" else "train", a.n)
+    seeds = split_seeds("test" if a.split == "test" else "train", a.n, start=a.seed0)
     if not names:
         print("No scanned objects found: run  python scripts/fetch_assets.py --scanned")
         return 1

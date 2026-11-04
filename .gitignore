@@ -18,3 +18,11 @@ web/dist/
 user_library/
 # local settings with API keys (kintsugi/settings.py): never committed
 config/
+
+# hackathon submission material, kept locally, not part of the software:
+# demo video tooling and renders, results figures and their generator, page previews
+/film/
+/docs/figures/
+/docs/results.md
+/scripts/make_figures.py
+/web/public/_preview/

@@ -14,7 +14,7 @@ GEOM_TYPES = {int(mujoco.mjtGeom.mjGEOM_PLANE): "plane", int(mujoco.mjtGeom.mjGE
               int(mujoco.mjtGeom.mjGEOM_ELLIPSOID): "ellipsoid"}
 
 
-def export_geoms(model, objects: dict | None = None) -> dict:
+def export_geoms(model, objects: dict | None = None, table_texture: str | None = None) -> dict:
     """Static description of every visible geom: enough for a browser to rebuild the scene. Meshes of imported
     objects (`objects` = scene.objects) are named "asset:<template>:<mesh>", served by the API per template."""
     assets = {oid: m["asset"] for oid, m in (objects or {}).items() if m.get("asset")}
@@ -37,7 +37,10 @@ def export_geoms(model, objects: dict | None = None) -> dict:
                 if item["mesh"].startswith(f"{oid}__"):
                     item["mesh"] = f"asset:{tpl}:{item['mesh'][len(oid) + 2:]}"
         geoms.append(item)
-    return {"bodies": [model.body(b).name for b in range(model.nbody)], "geoms": geoms}
+    out = {"bodies": [model.body(b).name for b in range(model.nbody)], "geoms": geoms}
+    if table_texture:                                # a photo's tabletop (runs/...), served by /api/image
+        out["table_texture"] = table_texture
+    return out
 
 
 class Recorder:
@@ -47,7 +50,7 @@ class Recorder:
         self.scene, self.fps = scene, fps
         self.live = live
         if live is not None:
-            live.scene(export_geoms(scene.model, scene.objects), fps)
+            live.scene(export_geoms(scene.model, scene.objects, scene.task.get("table_texture")), fps)
         self.poses = poses
         self.video = video
         self.frames, self.pose_frames, self.events = [], [], []
@@ -83,7 +86,7 @@ class Recorder:
         if save_poses and self.pose_frames:
             p = out_dir / f"{stem}_poses.json.gz"
             with gzip.open(p, "wt") as f:
-                json.dump({"fps": self.fps, "scene": export_geoms(self.scene.model, self.scene.objects), "frames": self.pose_frames,
+                json.dump({"fps": self.fps, "scene": export_geoms(self.scene.model, self.scene.objects, self.scene.task.get("table_texture")), "frames": self.pose_frames,
                            "events": self.events}, f)
             files["poses"] = p.name
         if save_video and self.frames:

@@ -1,0 +1,144 @@
+{
+  "name": "push_closed_side_blade",
+  "version": 1,
+  "kind": "push",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    if target is None:\n        return\n    tx = target['center'][0]\n    ty = target['center'][1]\n    cx = obj['center'][0]\n    cy = obj['center'][1]\n    w = obj['width']\n    close_gripper()\n    for i in range(7):\n        s = look()\n        if s:\n            if 'center' in s:\n                cx = s['center'][0]\n                cy = s['center'][1]\n            if 'width' in s:\n                w = s['width']\n            if 'extent_major' in s:\n                if s['extent_major'] > w:\n                    w = s['extent_major']\n            if 'extent_minor' in s:\n                if s['extent_minor'] > w:\n                    w = s['extent_minor']\n        dx = tx - cx\n        dy = ty - cy\n        dist = hypot(dx, dy)\n        if dist < p['goal_tol']:\n            break\n        ux = dx / dist\n        uy = dy / dist\n        rad = w * 0.5\n        back = p['back_off']\n        drv = p['drive_dist']\n        if drv > dist:\n            drv = dist\n        sx = cx - ux * (rad + back)\n        sy = cy - uy * (rad + back)\n        ex = sx + ux * (back + drv)\n        ey = sy + uy * (back + drv)\n        yaw = atan2(uy, ux) + p['yaw_off']\n        tilt = p['tilt']\n        pz = p['push_z']\n        lz = p['lift_z']\n        ts = p['travel_speed']\n        ps = p['push_speed']\n        move(sx, sy, lz, yaw=yaw, tilt=tilt, speed=ts)\n        move(sx, sy, pz, yaw=yaw, tilt=tilt, speed=ts)\n        move(ex, ey, pz, yaw=yaw, tilt=tilt, speed=ps)\n        move(ex, ey, lz, yaw=yaw, tilt=tilt, speed=ts)\n    retreat(0.08)",
+  "description": "Closes the gripper and pushes with the side of the closed finger pair yawed ~90deg to travel with slight tilt, in short look-driven shoves; single narrow side-blade contact herds the plate instead of the open two-point fork.",
+  "check": "plate center within goal_tol (~0.025m) of zone center in perception",
+  "params": {
+    "push_z": {
+      "default": 0.0174,
+      "range": [
+        0.008,
+        0.03
+      ],
+      "meaning": "tool height during push to hit thin plate edge"
+    },
+    "lift_z": {
+      "default": 0.0445,
+      "range": [
+        0.04,
+        0.15
+      ],
+      "meaning": "travel height when moving to start and lifting after push"
+    },
+    "back_off": {
+      "default": 0.0336,
+      "range": [
+        0.02,
+        0.09
+      ],
+      "meaning": "gap behind plate edge where push starts"
+    },
+    "drive_dist": {
+      "default": 0.239,
+      "range": [
+        0.05,
+        0.25
+      ],
+      "meaning": "max forward drive through plate per shove"
+    },
+    "push_speed": {
+      "default": 0.0495,
+      "range": [
+        0.03,
+        0.15
+      ],
+      "meaning": "speed during contact push"
+    },
+    "travel_speed": {
+      "default": 0.3556,
+      "range": [
+        0.1,
+        0.4
+      ],
+      "meaning": "speed for air moves to start and lift"
+    },
+    "goal_tol": {
+      "default": 0.0438,
+      "range": [
+        0.015,
+        0.05
+      ],
+      "meaning": "stop when plate center within this of target"
+    },
+    "yaw_off": {
+      "default": 1.4304,
+      "range": [
+        1.0,
+        2.1
+      ],
+      "meaning": "hand yaw offset from push direction, ~90deg for side-blade push"
+    },
+    "tilt": {
+      "default": 0.2101,
+      "range": [
+        0.0,
+        0.45
+      ],
+      "meaning": "lean about hand x to lower side edge contact"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261102-215706_eval_skills/spark_push",
+      "date": "2026-11-02",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "spark",
+        "model": "muse-spark-1.3-contributor",
+        "prompt_version": "7",
+        "input_hash": "f45ad7beab5f",
+        "cached": false,
+        "repairs": 0,
+        "usage": {
+          "prompt_tokens": 1945,
+          "completion_tokens": 9628
+        },
+        "latency_s": 126.89
+      },
+      "attempts": 1,
+      "capability": "push",
+      "task": "slide_plate",
+      "task_spec": null,
+      "program": "push(find_one(id='plate'), find_one(id='zone'))",
+      "description": "move an object along the table to a target location without grasping it (the object cannot be grasped: no grasp in the library fits it)",
+      "trials_simulated": 522,
+      "results": {
+        "held_out": [
+          0,
+          16,
+          16
+        ],
+        "p_value": 1.5e-05
+      },
+      "note": "created in the 2026-11-02 Spark evaluation (dry run), added to the user library 2026-11-03"
+    },
+    {
+      "version": 1,
+      "source": "contribution",
+      "date": "2026-11-04",
+      "run_id": "20261104-054226_reverify_base",
+      "gate": {
+        "requests": {
+          "slide_plate": {
+            "with": [
+              16,
+              16
+            ],
+            "without": [
+              16,
+              16
+            ],
+            "mode": "hold",
+            "p": 1.0
+          }
+        },
+        "regression_pass": true
+      }
+    }
+  ]
+}

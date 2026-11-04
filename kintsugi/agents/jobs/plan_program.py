@@ -84,9 +84,9 @@ def rule(inputs) -> dict:
                   "if not ok and next_best_grasp(obj):",
                   "    ok = pick(obj, grasp=next_best_grasp(obj))",
                   "if ok:",
-                  put,
-                  'elif has_skill("push"):',
-                  f'    push(obj, find_one(id="{g["target"]}"))']
+                  put]
+        if kinds.get(g.get("target")) == "zone":          # pushing works only onto a flat target
+            lines += ['elif has_skill("push"):', f'    push(obj, find_one(id="{g["target"]}"))']
     return {"program": "\n".join(lines),
             "explanation": "one pick and place per goal, bases before what goes on them, one retry per pick"}
 

@@ -40,6 +40,7 @@ async function send(method, path, body) {
 export const studio = {
   info: () => send("GET", "studio/info"),
   spec: (prompt, backend) => send("POST", "studio/spec", { prompt, backend }),
+  photoSpec: (image, prompt, backend) => send("POST", "studio/photo_spec", { image, prompt, backend }),
   program: (prompt, task, backend) => send("POST", "studio/program", { prompt, task, backend }),
   start: (body) => send("POST", "studio/jobs", body),
   jobs: () => send("GET", "studio/jobs"),

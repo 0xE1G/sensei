@@ -766,9 +766,118 @@ round started by the search (see status).
      close_drawer -> close_drawer; the close_drawer task, missing before, 8/8. To ship them: scripts/skills.py contribute.
    - Summary: Spark >= Claude on every job measured except diagnosis confirmations at low effort; better at creating
      skills (4/4 vs 3/4 round-1 promotions) and at finding failures (3.5x); slower per call (reasoning). Smoke 32/32.
+8q. **Headline harness (2026-11-03)**: `scripts/headlines.py` = every headline from one command into
+   runs/<id>_headlines/table.json + table.md (values, n, spread over repeats, run ids, code version). Each headline runs
+   the same script + arguments as when first reported (fixed seeds; repeats shift the seed block, model jobs re-ask
+   without the cache via KINTSUGI_NO_CACHE=1). Quick mode (~4 min) re-runs the cheap ones (tasks, scanned repair set,
+   task-spec comparison) and reuses the latest saved report of each expensive one, chosen by CONTENT (e.g. the Spark
+   skills arm, the images arm of diagnosis, a 3-strategy current-library search) and marked "reused" with run id + date;
+   `--full --repeats 3` re-runs everything (~4-5 h); `--final` adds the frozen test sets (10 scanned test objects;
+   bowl/cup test bands, 24 each), to be run once; `--list` shows the source of every headline; `--only <keys>`.
+   The failure-search trend over earlier library states is copied from its saved reports (not re-measurable).
+   First quick run (runs/20261103-003213_headlines): current library on 10 named tasks with Studio settings 159/160
+   (one stand_up miss); scanned repair set 105/160 (expert 148); task spec Spark 20/20, Claude 20/20, rule 10/20.
+   scanned_benchmark.py got --seed0; investigate reports record "second_look" (off / text / images).
+   Full run x3 (runs/20261103-003642_headlines, ~3 h): demo repair held-out only 12, 11, 12/16 (one repeat rejected):
+   promoted cards' size preconditions come from the tuned (train) bowls +-1 cm, and dev bands extrapolate, so larger /
+   smaller held-out bowls fell back to top_grasp. Fix in `planner.choose_grasp`: when no card fits, the "nearest
+   verified" card is used = same shape group, >= 8 trials of evidence there, scoring above the default, and size bounds
+   exceeded by at most 25% (`near_fit`; hollow / rim / elongation must match exactly, so a block never gets a cylinder
+   grasp). Re-run x3: demo repair promoted 3/3, held-out 16, 13, 15/16 vs 0/16; tasks and scanned repair identical;
+   old tasks 36/36 identical vs the last commit; smoke 32/32. Final table = merged runs/20261103-042248_headlines
+   (full + re-run of demo_repair / tasks / scanned_repair); figures + docs/results.md regenerated from it.
+   Final numbers: 10 named tasks 158.3/160 (+-1.2); scanned repair set 62% (+-3%, expert 147/160); task spec Spark
+   20/20, Claude 20/20, rule 10/20; plan programs 56/56 for all (= fixed plan); Spark skills from scratch 4/4 promoted
+   in round 1 in each of 3 repeats (held-out 14-16/16); transfer mug 9/10 with 10 trials vs 900 (556 search) from
+   scratch; diagnosis top-1 87.5%; failure search on the current library per 100: random 1.0, Optuna 7.3, Spark 8.3.
+8r. **Digital twin from a photo (2026-11-03)**: Studio prompt box has a Photo button (or drop an image); the request is
+   optional (empty = Muse Spark proposes the task from the scene). Only the start differs: `kintsugi/twin.py` returns an
+   ordinary task with `layout_fixed`, so plan / run / repair are unchanged. Path: photo (EXIF-upright, <= 1280 px) ->
+   job `scene_photo` (Spark vision, prompt v2: every object on the table as a template + label + rough pixel box + real
+   width + camera elevation + the task; task part checked by the task_spec validator) -> SAM 3.1 boxes, one request per
+   label (`perception/sam.py segment()`, Responses API, non-streamed; Spark's box kept when SAM finds nothing) ->
+   geometry without depth: metres/pixel from real width / pixel width per object, a robust line over image rows for
+   perspective, depth integrated from the bottom divided by sin(elevation) -> robot frame (robot = photographer),
+   centred in the reach, shrunk only if centres exceed it, overlaps pushed apart (notes say so). Server POST
+   /api/studio/photo_spec; UI card "From your photo" (overlay with SAM boxes, tagged hypothesis: positions estimated).
+   SAM masks are NOT decoded (encoding documented only via Meta's `meta-sam-parser`, whose pip install was blocked);
+   boxes suffice here, and Perception(mode="sam") still refuses to start. Measured (`scripts/twin_eval.py`, Spark,
+   8 rendered scenes x 2 camera heights, robot hidden, true layout known; runs/20261103-194643_twin_eval): 16/16 built,
+   objects found 70/70, colours 70/70, templates 67/70 (a zone read as a block), position error after centring 2.7 cm
+   mean (worst case 10.7 cm), left/right + front/behind relations 282/282; ~20-45 s per photo (Spark ~20-40 s, 2-9 SAM
+   calls). A photo-built sort task ran 8/8 from the Studio. Real photos: `twin_eval.py --photos <folder>` (no truth).
+   First real photo (user's, red block + yellow ball + blue open box on a wood table, top-down; runs/twin_photos,
+   runs/20261103-201405_twin_eval): SAM conf 0.96-0.98 on all three, Spark chose "Put the red block and yellow ball
+   onto the blue tray", twin layout matches by eye (side_by_side.jpg), task 8/8. Found on it: every object had yaw 0,
+   so the box's long side was turned 90 deg -> `orientations()`: trays / bins / zones / bars take yaw from their photo
+   box shape (foreshortening undone); rendered set unchanged (70/70, 2.7 cm, 282/282). Smoke 32/32.
+   Second real photo (desk: mug, notebook, apple, potted plant, tape dispenser, pen, scissors;
+   runs/20261103-201959_twin_eval): first attempt rejected twice (task_spec's random-layout "table too crowded" check,
+   then a one-item "order"); fixed: scene_photo validates with `task_spec.validate(..., build=False)` (twin.py builds
+   the photo layout itself), prompt v3 limits "order". Then: SAM 0.90-0.99 on all 7; Spark used scanned templates
+   (mug_blue, plant_pot, tape_roll, scissors), apple -> ball, pen -> bar, notebook -> black tray; task "place pen,
+   scissors and tape on the notebook". Run 0/8: pen 8/8, scissors slip 24/24 attempts, tape roll missed_grasp 24/24 -
+   the same scanned objects the library already fails on (benchmark 0/8 each, not repaired). Scan textures fix colours
+   (twin mug looks teal).
+   Table surface by Muse Image (`muse-image-1.0`, POST /v1/images/edits, $0.01 per image; no mask parameter):
+   `twin.table_texture()` asks it to remove every object from the photo (keep surface, grain, light, view), crops the
+   middle of the empty table, turns it so u runs along the robot's x, stores a mirrored 2 x 2 tile (seamless) ->
+   task["table_texture"]; only then `build_scene` gives the table plane a texture material (texrepeat 1.25/m,
+   uniform), `export_geoms(..., table_texture)` passes it to the browser, whose Workbench maps it (repeat w/0.8 m).
+   Appearance only (geometry, friction, perception unchanged); a failed call leaves the default table with a note.
+   9-20 s per photo. Both real photos: clean empty oak tables, twins on the same wood (both.jpg in
+   runs/20261103-203723_twin_eval). Smoke 32/32.
+   Desk repair: the Studio's auto_repair found "0 valid failures": it checked only the FIRST failed step per episode
+   (scissors, which the expert cannot do either: it cannot fit pen + scissors on the small notebook-tray), so the
+   tape roll (expert solves it with the reference rim pinch) was never considered. New `auto_repair(all_steps=True)`
+   (Studio only; scripts keep first-step semantics, replays deduplicated per episode, numbering unchanged): every failed
+   step whose item the expert's exact replay solves is a valid failure.
+   Re-run (runs/20261103-204403_studio, 1 h 46 min, Spark): 48 failed steps, 24 valid in 3 clusters. Cluster 1: 4
+   confirmed causes; the explorer (given only the spec) picked its own largest failure, scissors (tie 24/24 with the
+   tape) -> patch axis_centre_across.along = 0.0 for solid-wide-short-long (investigator), gate fix 24/24 vs 0,
+   held-out 48/48 vs 0/48, regression pass -> user library. Clusters 2-3 (tape roll pushed by model-written push
+   skills): revisions rejected (one fixed 16/16 but broke the plate push, 2/16 on its original request; others fixed
+   nothing). Re-run: pen 8/8, scissors 0/8 -> 8/8, tape roll still fails, whole task 0/8 (the expert cannot fit all
+   three on the 15 x 21 cm notebook-tray either). Fixed after: `Explorer(focus=(obj, skill))` repairs that cluster
+   (fallback to the largest, logged, if it does not reproduce); auto_repair passes its cluster's item. Checked on the
+   desk spec without patches: default -> scissors (as before), focus tape_clear/rim_pinch -> tape. Default unchanged
+   for scripts. Smoke 32/32.
+   Push only onto flat targets (the desk run pushed the tape roll into the notebook-tray's 1.5 cm lip):
+   feasibility SURFACES = {"zone"}; program `use("push", ...)` refuses trays / bins / bowls / cups (RAISED_TARGETS) with
+   a clear ProgramError; plan prompt v10 + rule stand-in push only onto zones. slide_plate 8/8 program and fixed plan;
+   smoke 32/32. Desk Studio runs moved to runs/_archive/ (not listed); the scissors patch stays in user_library.
+   Live Studio view now keeps the photo's table texture (live scene line carries table_texture).
+   Film v5 (film/video/out/kintsugi_film_v5.mp4, 3:52): story slide "It copies a real workspace from one photo"
+   (photo -> Muse Spark + SAM boxes -> Muse Image empty table -> robot clip on the twin `photo_twin`, measured 70/70,
+   2.7 cm, 282/282) and walkthrough chapter 2 "From a photo of your table" (record_vt take photo_run: the block/ball/box
+   photo, no request, Spark's task, twin + card, Run, 8/8 on the copied table). Other slides unchanged.
+8s. **Release pass (2026-11-04)**: demo video public at https://youtu.be/zoBb1hVsLBc. Settings button = cog + label
+   (the old icon read as a light/dark switch); Settings is a centred dialog (sections Models / Photo tools / Downloads:
+   default-model cards, Meta Model API card with status, key show/hide, Test connection, address + model under
+   Advanced, Claude fallback toggle; SAM 3.1 + Muse Image status from /api/settings "photo"). Useful local discoveries
+   contributed to the base library through the re-verification gate (`scripts/skills.py contribute`): close_drawer
+   (16/16 vs 0/16), push_closed_side_blade and stand_up_center_air_rotate (hold 16/16, 15/16 vs 16/16); regression
+   pass for all. Stay local: open_drawer_spark (10/16 head-to-head) and the scissors patch
+   axis_centre_across/solid-wide-short-long, REJECTED: its desk request fails whole either way (0/16 vs 0/16, the
+   expert cannot fit all three items), and scissors alone onto a tray only 4/16 vs 0/16 (p 0.06): the 24/24 held for
+   the desk layout only. The gate now accepts patch triggers whose typed request sits in kwargs.task_spec. **Hackathon material is never pushed** (user rule):
+   film/, docs/figures/, docs/results.md, scripts/make_figures.py, web/public/_preview/ are git-ignored and kept
+   locally (never delete them). README rewritten (intro, video, GIFs in docs/media/ made by
+   film/make_readme_media.py, results, setup).
 9b. Later (user, 2026-11-02): learn a task from a video (Spark video input + SAM 3.1 tracking -> spec + plan
    program, verified as a composite; measured on rendered expert clips first) and task from a photo (goal photo ->
    measurable goals; photo of a real table -> simulated copy). See docs/implementation_plan.md optional 1 / 1b.
+9c. Public replay site (user, 2026-11-03; after README): static build of the web app (Progress, Episodes, Investigator,
+   Skills + the demo runs) with the server's JSON exported to files, hosted on GitHub Pages, so judges open one link
+   with no install. Physics already never runs in the browser, so only the read-only API needs a static export.
+9d. Demo film (2026-11-03): `film/make_clips.py` (git-ignored folder, like all video tooling) re-runs real scenes (same task / seed / library) with a film
+   camera in the recorder slot (1280x720, framed on the scene's objects, 2x speed, practice 3x) and stamps the measured
+   outcome; "before" = seed library, seed searched until it fails; "after" = current library on the SAME seed;
+   "practice" = 27 candidate grasps from the demo repair's success map (weakest -> strongest per tile). Grids by ffmpeg
+   xstack (3x3, 1920x1080). `film/make_cards.py` = title / section / number cards from the final headline table
+   (trend card uses the current library's 3-repeat mean, not the best repeat). `film/make_film.py` -> the opening,
+   runs/film/kintsugi_intro.mp4 (84 s; all 9 before fail, all 9 after succeed). Still to do: app walkthrough
+   recording, feature clips (investigator, Spark writing a skill, mug transfer), final cut + narration script.
 10. Unseen-object benchmark, test split once, freeze numbers, demo video. Post-hackathon: pouring (tilt-while-holding
    primitive + particle liquid), video imitation, curriculum, self-proposed tasks.
 
@@ -779,6 +888,7 @@ python scripts/fetch_assets.py
 python scripts/fetch_assets.py --scanned             # optional: 32 scanned household objects (~50 MB); or Settings > Downloads in the app
 python scripts/smoke_test.py                       # run after every change
 python scripts/skills.py list                       # base + user library; export / import / contribute packs
+python scripts/headlines.py                         # every headline into one table (--full --repeats 3; --final once)
 python scripts/run_task.py sort_with_bowl -n 8 --oracle         # the demo task, failures checked by the oracle
 python scripts/prompt_task.py "Put the bowl on the tray." -n 4  # prompt -> task spec (rule backend) -> run
 python scripts/failure_search.py --from-seed --budget 64        # where does the library fail? (random/Optuna/model)

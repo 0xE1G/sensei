@@ -48,6 +48,17 @@ def plan_spec(prompt: str, backend: str | None = None) -> dict:
     return out
 
 
+def plan_photo(image_path, prompt: str = "", backend: str | None = None) -> dict:
+    """Like plan_spec, but from a photo of a real table (+ an optional request): kintsugi.twin builds the task, whose
+    objects keep the photo's layout (layout_fixed); everything after this sees an ordinary task."""
+    from . import twin
+    out = twin.build(image_path, prompt, backend=backend, out_dir=pathlib.Path(image_path).parent)
+    if out.get("status") == "ok" and out.get("task"):
+        out["preview"] = preview(out["task"])
+        out["feasibility"] = feasibility_preview(out["task"])
+    return out
+
+
 def feasibility_preview(task: dict) -> list | None:
     """Per-goal feasibility with the current library, perceived on the first layout that fits (no physics)."""
     from .feasibility import assess
@@ -102,7 +113,7 @@ def preview(task: dict) -> dict:
     scene = build_scene(task, seed=seeds[0])
     mujoco.mj_forward(scene.model, scene.data)
     d = scene.data
-    return {"fps": 30, "scene": export_geoms(scene.model, scene.objects),
+    return {"fps": 30, "scene": export_geoms(scene.model, scene.objects, task.get("table_texture")),
             "frames": [{"t": 0.0, "p": d.xpos.round(4).tolist(), "q": d.xquat.round(4).tolist()}], "events": []}
 
 
@@ -234,7 +245,7 @@ def run_job(job_dir: pathlib.Path):
             else:
                 rep = auto_repair([job_dir / "run"], workers=job["workers"], client=ModelClient(job.get("backend")),
                                   min_failures=1, max_cases=4, run_id=f"{rel}/repair",
-                                  explorer_kwargs={"min_fail_rate": RARE_FAILURE_RATE})
+                                  explorer_kwargs={"min_fail_rate": RARE_FAILURE_RATE}, all_steps=True)
                 changes = [c for c in rep["clusters"] if c.get("repair") and
                            (c["repair"].get("routed") or c["repair"].get("patched") or c["repair"].get("promoted"))]
                 result["repair"] = {"changed": bool(changes), "run_id": rep["run_id"],

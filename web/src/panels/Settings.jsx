@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { assetsApi, settingsApi } from "../api.js";
 
-// Settings drawer: model access (keys stay on this machine; the server never sends them back), mask source,
-// and the third-party assets with download buttons. AssetGate blocks the app until the robot model is present.
+// Settings: model access (keys stay on this machine; the server only ever returns "set" + the last four characters),
+// photo tools and the third-party assets with download buttons, as one dialog with three sections. AssetGate blocks
+// the app until the robot model is present.
 
 export function useAssets() {
   const [st, setSt] = useState(null);
@@ -53,7 +54,7 @@ function AssetRow({ item, which, dl, onDownload }) {
           {which === "scanned" ? ` · ${item.present}/${item.total} downloaded` : item.present ? " · downloaded" : " · not downloaded"}</div>
         <Progress dl={dl} which={which} />
       </div>
-      {!complete && (
+      {complete ? <Status tone="ok">Installed</Status> : (
         <button className="btn primary" disabled={busy} onClick={() => onDownload(which)}>
           {busy && dl.which === which ? "Downloading…" : which === "scanned" && item.present ? "Download the rest" : "Download"}
         </button>
@@ -67,8 +68,8 @@ export function AssetGate({ children }) {
   if (!st) return null;                                          // wait for the status (one quick request)
   if (st.error || st.robot.present) return children;
   return (
-    <div className="gate">
-      <div className="card gate-card">
+    <div className="asset-gate">
+      <div className="card asset-gate-card">
         <h3>One download before the first run</h3>
         <p className="sub">The robot model is not on this machine yet. It comes from its public repository and is
           stored in <code>assets/</code> (never committed). Nothing is downloaded until you press the button.</p>
@@ -80,39 +81,194 @@ export function AssetGate({ children }) {
   );
 }
 
-function Secret({ label, field, s, edit, setEdit }) {
+// ---------------------------------------------------------------------------------------------- settings dialog
+const Icon = ({ d, size = 18 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+);
+const I = {
+  models: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
+  photo: <><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></>,
+  download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeOff: <path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" />,
+  lock: <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
+};
+
+const MetaMark = () => (
+  <svg viewBox="0 0 42 24" width="30" height="17" aria-hidden="true" className="sx-brand">
+    <path d="M5 15.5C5 9.5 7.8 5 11.4 5c3.2 0 5.4 3.4 8.4 8.6S25.6 21 29.2 21c3.4 0 6-2.6 6-6.4C35.2 9.2 32.6 5 29 5c-3.3 0-5.6 3.6-8.6 8.6S14.8 21 11.6 21C7.8 21 5 18.8 5 15.5z"
+          fill="none" stroke="#1877f2" strokeWidth="3.6" strokeLinejoin="round" />
+  </svg>
+);
+
+function Status({ tone, children }) {                 // tone: ok | warn | off
+  return <span className={`st-pill ${tone}`}><span className="st-dot" />{children}</span>;
+}
+
+function KeyField({ label, field, s, edit, setEdit }) {
+  const [show, setShow] = useState(false);
   const cur = s[field];
-  const fromEnv = s[`${field}_source`] === "environment";
+  if (s[`${field}_source`] === "environment") {
+    return <div className="sx-field"><label>{label}</label><div className="sx-static">Set by an environment variable ({cur?.hint})</div></div>;
+  }
   return (
-    <label className="set-field">
-      <span>{label}</span>
-      {fromEnv ? <span className="sub">set by an environment variable ({cur?.hint})</span> : (
-        <input type="password" autoComplete="off" placeholder={cur?.set ? `saved (${cur.hint}) · type to replace` : "paste the key"}
-          value={edit[field] ?? ""} onChange={(e) => setEdit({ ...edit, [field]: e.target.value })} />
-      )}
-    </label>
+    <div className="sx-field">
+      <label htmlFor={field}>{label}</label>
+      <div className="sx-input-wrap">
+        <input id={field} type={show ? "text" : "password"} autoComplete="off" spellCheck={false}
+               placeholder={cur?.set ? `Saved (${cur.hint}) · paste a new key to replace it` : "Paste your API key"}
+               value={edit[field] ?? ""} onChange={(e) => setEdit({ ...edit, [field]: e.target.value })} />
+        <button type="button" className="sx-eye" onClick={() => setShow(!show)} aria-label={show ? "Hide key" : "Show key"}
+                title={show ? "Hide" : "Show"}><Icon d={show ? I.eyeOff : I.eye} size={16} /></button>
+      </div>
+    </div>
   );
 }
 
-function Plain({ label, field, s, edit, setEdit, placeholder }) {
-  const fromEnv = s[`${field}_source`] === "environment";
+function TextField({ label, field, s, edit, setEdit, placeholder }) {
+  if (s[`${field}_source`] === "environment") {
+    return <div className="sx-field"><label>{label}</label><div className="sx-static">{s[field]} (environment variable)</div></div>;
+  }
   return (
-    <label className="set-field">
-      <span>{label}</span>
-      {fromEnv ? <span className="sub">{s[field]} (environment variable)</span> : (
-        <input type="text" autoComplete="off" placeholder={placeholder}
-          value={edit[field] ?? s[field] ?? ""} onChange={(e) => setEdit({ ...edit, [field]: e.target.value })} />
-      )}
-    </label>
+    <div className="sx-field">
+      <label htmlFor={field}>{label}</label>
+      <input id={field} type="text" autoComplete="off" spellCheck={false} placeholder={placeholder}
+             value={edit[field] ?? s[field] ?? ""} onChange={(e) => setEdit({ ...edit, [field]: e.target.value })} />
+    </div>
   );
 }
+
+function TestResult({ r }) {
+  if (!r) return null;
+  if (r === "testing") return <div className="sx-result"><span className="spinner" /> Testing the connection…</div>;
+  return <div className={`sx-result ${r.ok ? "ok" : "bad"}`}>{r.ok ? "✓" : "✗"} {r.message}{r.seconds != null ? ` · ${r.seconds} s` : ""}</div>;
+}
+
+const BACKENDS = [
+  ["spark", "Muse Spark", "Meta's model: plans tasks, diagnoses failures, writes new skills"],
+  ["claude_cli", "Claude", "Through the claude CLI on this computer"],
+  ["rule", "Offline rules", "No model: built-in rules for the standard tasks"],
+];
+
+function ModelsPane({ s, edit, setEdit, save, forget, setDefault, tests, test }) {
+  const metaReady = s.meta_api_key?.set && s.meta_api_base;
+  const dirty = ["meta_api_base", "meta_model", "meta_api_key"].some((f) => f in edit);
+  return (
+    <>
+      <div className="sx-section-head"><h4>Default model</h4><p>Used by the Studio. Scripts and experiments keep the model they are given.</p></div>
+      <div className="sx-choices" role="radiogroup" aria-label="Default model">
+        {BACKENDS.map(([k, name, desc]) => {
+          const on = (s.default_backend || "") === k;
+          const unavailable = (k === "spark" && !metaReady) || (k === "claude_cli" && !s.claude_cli_found);
+          return (
+            <button key={k} type="button" role="radio" aria-checked={on} className={`sx-choice ${on ? "on" : ""}`}
+                    onClick={() => setDefault("default_backend", k)}>
+              <span className="sx-radio" />
+              <span className="sx-choice-text"><b>{name}</b><span>{desc}</span>{unavailable && <em>not set up yet</em>}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button type="button" className={`sx-auto ${!s.default_backend ? "on" : ""}`} onClick={() => setDefault("default_backend", "")}>
+        <span className="sx-radio" />Pick the best available automatically</button>
+
+      <div className="sx-card">
+        <div className="sx-card-head">
+          <MetaMark />
+          <div><h5>Meta Model API</h5><p>Muse Spark, SAM 3.1 and Muse Image</p></div>
+          {metaReady ? <Status tone="ok">Key saved {s.meta_api_key.hint}</Status> : <Status tone="off">Not set</Status>}
+        </div>
+        <KeyField label="API key" field="meta_api_key" s={s} edit={edit} setEdit={setEdit} />
+        <details className="sx-adv">
+          <summary>Advanced: address and model</summary>
+          <TextField label="API address" field="meta_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://api.meta.ai/v1" />
+          <TextField label="Model" field="meta_model" s={s} edit={edit} setEdit={setEdit} placeholder="muse-spark-1.3" />
+        </details>
+        <label className="sx-switch" title="The answer is marked as Claude's and never counted as Spark's">
+          <input type="checkbox" checked={s.spark_fallback !== "0"} onChange={(e) => setDefault("spark_fallback", e.target.checked ? "1" : "0")} />
+          <span className="sx-track"><span /></span>
+          If a Muse Spark call fails, ask Claude instead (marked as a fallback)
+        </label>
+        <div className="sx-actions">
+          <button className="btn primary" disabled={!dirty} onClick={() => save(["meta_api_base", "meta_model", "meta_api_key"])}>Save</button>
+          <button className="btn" disabled={!metaReady || dirty} onClick={() => test("spark")}>Test connection</button>
+          {(s.meta_api_key_source === "settings" || s.meta_api_base_source === "settings") &&
+            <button className="btn ghost danger" onClick={() => forget(["meta_api_base", "meta_model", "meta_api_key"])}>Remove key</button>}
+        </div>
+        <TestResult r={tests.spark} />
+      </div>
+
+      <div className="sx-card">
+        <div className="sx-card-head">
+          <span className="sx-mono">C</span>
+          <div><h5>Claude</h5><p>Optional fallback and development model, through the claude CLI</p></div>
+          {s.claude_cli_found ? <Status tone="ok">CLI found</Status> : <Status tone="off">CLI not found</Status>}
+        </div>
+        {!s.claude_cli_found && <p className="sx-hint">Install Claude Code and run <code>claude</code> once to log in; this updates the next time Settings opens.</p>}
+        <div className="sx-actions"><button className="btn" disabled={!s.claude_cli_found} onClick={() => test("claude_cli")}>Test</button></div>
+        <TestResult r={tests.claude_cli} />
+      </div>
+    </>
+  );
+}
+
+function PhotoPane({ s, edit, setEdit, save, forget }) {
+  const dirty = ["sam_api_base", "sam_api_key"].some((f) => f in edit);
+  return (
+    <>
+      <div className="sx-section-head"><h4>Photo tools</h4>
+        <p>Start a task from a photo of a real table: Muse Spark reads the scene, SAM 3.1 finds each object and Muse Image
+          recreates the tabletop. They use your Meta API key.</p></div>
+      <div className="sx-card">
+        <div className="sx-card-head">
+          <MetaMark />
+          <div><h5>SAM 3.1 + Muse Image</h5><p>Object boxes and the empty-table surface</p></div>
+          {s.photo?.available ? <Status tone="ok">Ready</Status> : <Status tone="off">Needs the Meta key</Status>}
+        </div>
+        {!s.photo?.available && <p className="sx-hint">Add your Meta API key under Models.</p>}
+        <details className="sx-adv">
+          <summary>Advanced: a separate SAM endpoint</summary>
+          <p className="sx-hint">Only needed if SAM runs somewhere other than the Meta Model API.</p>
+          <TextField label="SAM address" field="sam_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://…" />
+          <KeyField label="SAM key" field="sam_api_key" s={s} edit={edit} setEdit={setEdit} />
+          <div className="sx-actions">
+            <button className="btn primary" disabled={!dirty} onClick={() => save(["sam_api_base", "sam_api_key"])}>Save</button>
+            {(s.sam_api_key_source === "settings" || s.sam_api_base_source === "settings") &&
+              <button className="btn ghost danger" onClick={() => forget(["sam_api_base", "sam_api_key"])}>Remove</button>}
+          </div>
+        </details>
+      </div>
+      <div className="sx-note"><Icon d={I.lock} size={15} />Inside the simulation the robot keeps the simulator's exact object
+        masks; SAM is used on real photos.</div>
+    </>
+  );
+}
+
+function DownloadsPane({ assets, download }) {
+  return (
+    <>
+      <div className="sx-section-head"><h4>Downloads</h4><p>Third-party assets, stored in <code>assets/</code> and never
+        committed. Nothing downloads until you press a button.</p></div>
+      {assets && !assets.error ? (<>
+        <div className="sx-card"><AssetRow item={assets.robot} which="robot" dl={assets.download} onDownload={download} /></div>
+        <div className="sx-card"><AssetRow item={assets.scanned} which="scanned" dl={assets.download} onDownload={download} /></div>
+      </>) : <p className="sx-hint">Checking…</p>}
+    </>
+  );
+}
+
+const SECTIONS = [["models", "Models", I.models], ["photo", "Photo tools", I.photo], ["downloads", "Downloads", I.download]];
 
 export function SettingsDrawer({ onClose, onChanged }) {
   const [s, setS] = useState(null);
   const [edit, setEdit] = useState({});
-  const [msg, setMsg] = useState({});
+  const [note, setNote] = useState(null);
+  const [tests, setTests] = useState({});
+  const [tab, setTab] = useState("models");
   const [assets, download] = useAssets();
-  useEffect(() => { settingsApi.get().then(setS).catch((e) => setMsg({ save: e.message })); }, []);
+  useEffect(() => { settingsApi.get().then(setS).catch((e) => setNote({ bad: true, text: e.message })); }, []);
   const finished = assets?.download?.finished;
   useEffect(() => { if (finished) onChanged?.(); }, [finished]);   // the Studio's "not downloaded" hint goes away
   useEffect(() => {
@@ -120,99 +276,48 @@ export function SettingsDrawer({ onClose, onChanged }) {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
+  const flash = (text, bad = false) => { setNote({ text, bad }); setTimeout(() => setNote(null), 3500); };
+  const reload = async () => { try { setS(await settingsApi.get()); } catch { /* keep the last view */ } };
   const save = async (fields) => {
     const body = Object.fromEntries(fields.filter((f) => f in edit).map((f) => [f, edit[f]]));
-    try {
-      const r = await settingsApi.save(body);
-      setS(r); setEdit({}); setMsg({ save: "Saved on this machine." }); onChanged?.();
-    } catch (e) { setMsg({ save: e.message }); }
+    try { await settingsApi.save(body); await reload(); setEdit({}); flash("Saved on this computer."); onChanged?.(); }
+    catch (e) { flash(e.message, true); }
   };
   const forget = async (fields) => {
-    try { setS(await settingsApi.save(Object.fromEntries(fields.map((f) => [f, ""])))); setMsg({ save: "Removed." }); onChanged?.(); }
-    catch (e) { setMsg({ save: e.message }); }
+    try { await settingsApi.save(Object.fromEntries(fields.map((f) => [f, ""]))); await reload(); flash("Removed."); onChanged?.(); }
+    catch (e) { flash(e.message, true); }
   };
   const test = async (backend) => {
-    setMsg({ ...msg, [backend]: "testing…" });
-    try {
-      const r = await settingsApi.test(backend);
-      setMsg((m) => ({ ...m, [backend]: `${r.ok ? "works" : "failed"}: ${r.message} (${r.seconds} s)` }));
-    } catch (e) { setMsg((m) => ({ ...m, [backend]: e.message })); }
+    setTests((t) => ({ ...t, [backend]: "testing" }));
+    try { const r = await settingsApi.test(backend); setTests((t) => ({ ...t, [backend]: r })); }
+    catch (e) { setTests((t) => ({ ...t, [backend]: { ok: false, message: e.message } })); }
   };
   const setDefault = async (k, v) => {
-    try { setS(await settingsApi.save({ [k]: v })); onChanged?.(); } catch (e) { setMsg({ save: e.message }); }
+    try { await settingsApi.save({ [k]: v }); await reload(); onChanged?.(); } catch (e) { flash(e.message, true); }
   };
   return (
-    <div className="drawer-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="drawer" role="dialog" aria-label="Settings">
-        <div className="drawer-head"><h3>Settings</h3><button className="btn" onClick={onClose}>Close</button></div>
-        {!s ? <p className="sub">{msg.save || "Loading…"}</p> : (
-          <>
-            <section>
-              <div className="exp-group">Language model</div>
-              <label className="set-field"><span>Default in Studio</span>
-                <select value={s.default_backend || ""} onChange={(e) => setDefault("default_backend", e.target.value)}>
-                  <option value="">automatic (best available)</option>
-                  <option value="rule">Rule stand-in (offline, no model)</option>
-                  <option value="claude_cli">Claude (claude CLI)</option>
-                  <option value="spark">Meta Muse Spark</option>
-                </select>
-              </label>
-              <p className="sub">Scripts and experiments are not affected: they use the backend they are given.</p>
-              <div className="set-block">
-                <div className="asset-title">Meta Muse Spark</div>
-                <Plain label="API address" field="meta_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://…/v1" />
-                <Plain label="Model" field="meta_model" s={s} edit={edit} setEdit={setEdit} placeholder="muse-spark" />
-                <Secret label="API key" field="meta_api_key" s={s} edit={edit} setEdit={setEdit} />
-                <label className="toggle" title="A Spark call that fails or times out is sent to Claude instead; the answer is marked as Claude's and never counted as Spark's">
-                  <input type="checkbox" checked={s.spark_fallback !== "0"} onChange={(e) => setDefault("spark_fallback", e.target.checked ? "1" : "0")} />
-                  {" "}If Spark fails, ask Claude (marked as a fallback)</label>
-                <div className="set-actions">
-                  <button className="btn primary" onClick={() => save(["meta_api_base", "meta_model", "meta_api_key"])}>Save</button>
-                  <button className="btn" disabled={!s.meta_api_key?.set || !s.meta_api_base} onClick={() => test("spark")}>Test connection</button>
-                  {(s.meta_api_key_source === "settings" || s.meta_api_base_source === "settings") &&
-                    <button className="btn" onClick={() => forget(["meta_api_base", "meta_model", "meta_api_key"])}>Remove</button>}
-                </div>
-                {msg.spark && <p className="sub">{msg.spark}</p>}
-              </div>
-              <div className="set-block">
-                <div className="asset-title">Claude (development stand-in)</div>
-                <p className="sub">{s.claude_cli_found ? "claude CLI found on this machine." : "claude CLI not found on PATH."}</p>
-                <div className="set-actions"><button className="btn" disabled={!s.claude_cli_found} onClick={() => test("claude_cli")}>Test</button></div>
-                {msg.claude_cli && <p className="sub">{msg.claude_cli}</p>}
-              </div>
-            </section>
-            <section>
-              <div className="exp-group">Object masks</div>
-              <label className="set-field"><span>Default in Studio</span>
-                <select value={s.default_masks || "sim"} onChange={(e) => setDefault("default_masks", e.target.value)}>
-                  <option value="sim">Simulator masks</option>
-                  <option value="sam" disabled={!s.sam.available}>SAM 3{s.sam.available ? "" : " (not available)"}</option>
-                </select>
-              </label>
-              {!s.sam.available && <p className="sub">{s.sam.reason}.</p>}
-              <div className="set-block">
-                <div className="asset-title">SAM 3 access</div>
-                <Plain label="API address" field="sam_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://…" />
-                <Secret label="API key" field="sam_api_key" s={s} edit={edit} setEdit={setEdit} />
-                <div className="set-actions">
-                  <button className="btn primary" onClick={() => save(["sam_api_base", "sam_api_key"])}>Save</button>
-                  {(s.sam_api_key_source === "settings" || s.sam_api_base_source === "settings") &&
-                    <button className="btn" onClick={() => forget(["sam_api_base", "sam_api_key"])}>Remove</button>}
-                </div>
-              </div>
-            </section>
-            <section>
-              <div className="exp-group">Downloads</div>
-              {assets ? (<>
-                <AssetRow item={assets.robot} which="robot" dl={assets.download} onDownload={download} />
-                <AssetRow item={assets.scanned} which="scanned" dl={assets.download} onDownload={download} />
-              </>) : <p className="sub">Checking…</p>}
-            </section>
-            {msg.save && <p className="sub">{msg.save}</p>}
-            <p className="sub foot">Keys are stored only on this computer ({s.config_file}, not committed) and are never shown again in full.</p>
-          </>
-        )}
-      </aside>
+    <div className="sx-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="sx-dialog" role="dialog" aria-modal="true" aria-label="Settings">
+        <nav className="sx-nav">
+          <div className="sx-title">Settings</div>
+          {SECTIONS.map(([k, label, icon]) => (
+            <button key={k} className={`sx-tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)} aria-current={tab === k}>
+              <Icon d={icon} size={17} />{label}
+            </button>
+          ))}
+          <div className="sx-nav-foot"><Icon d={I.lock} size={14} /><span>Keys are stored only on this computer
+            {s?.config_file ? <> in <code>{s.config_file}</code></> : null} and never committed.</span></div>
+        </nav>
+        <div className="sx-body">
+          <button className="sx-close" onClick={onClose} aria-label="Close settings"><Icon d={I.close} /></button>
+          {!s ? <p className="sx-hint">{note?.text || "Loading…"}</p> : (
+            tab === "models" ? <ModelsPane s={s} edit={edit} setEdit={setEdit} save={save} forget={forget} setDefault={setDefault} tests={tests} test={test} />
+              : tab === "photo" ? <PhotoPane s={s} edit={edit} setEdit={setEdit} save={save} forget={forget} />
+                : <DownloadsPane assets={assets} download={download} />
+          )}
+          {note && <div className={`sx-toast ${note.bad ? "bad" : ""}`}>{note.text}</div>}
+        </div>
+      </div>
     </div>
   );
 }

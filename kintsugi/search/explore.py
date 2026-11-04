@@ -119,13 +119,15 @@ class Explorer:
                  min_feasible: float = 0.75, run_id: str | None = None, seed: int = 0, force: bool = False,
                  library: dict | None = None, performance: dict | None = None, task_kwargs: dict | None = None,
                  patches: dict | None = None, hints: list | None = None, patch_trials: int = 20,
-                 perturb: dict | None = None, min_fail_rate: float | None = None):
+                 perturb: dict | None = None, min_fail_rate: float | None = None, focus: tuple | None = None):
         """`min_fail_rate`: stop early as "rare_failure" when the valid-failure rate is confidently below it (Wilson
         upper bound < min_fail_rate): the gates need ~10 failed cases, so a rare failure costs a long search that
         cannot pass them. None = off (experiments).
         `library`: the card set every trial uses (default: the active library, snapshotted now).
         `performance`: routing evidence (default: base + user library; {} for the seed library).
-        `task_kwargs`: e.g. {"region": ...} to repair a failure-search cluster with region-sampled probe scenes."""
+        `task_kwargs`: e.g. {"region": ...} to repair a failure-search cluster with region-sampled probe scenes.
+        `focus`: (object id, skill) to repair, e.g. the cluster auto_repair is working on; else (None, default) the
+        largest valid failure cluster of the before phase. A focus that does not reproduce falls back to the largest."""
         self.task_kwargs = task_kwargs or {}
         self.perf = load_performance() if performance is None else performance
         self.patches = load_patches() if patches is None else patches
@@ -133,6 +135,7 @@ class Explorer:
         self.perturb = perturb              # physics conditions to repair under (e.g. where the failures happened)
         self.patch_trials = patch_trials
         self.min_fail_rate = min_fail_rate
+        self.focus = tuple(focus) if focus else None
         self.task = task
         self.n_before, self.n_candidates, self.per_family = n_before, n_candidates, per_family
         self.family_seeds, self.max_families = family_seeds, max_families
@@ -230,6 +233,13 @@ class Explorer:
                     labels[key][st["label"]] += 1
                     cseeds.setdefault(key, []).append(r["seed"])
         top = cluster.most_common(1)[0][0] if cluster else None
+        if self.focus and cluster:
+            fo, fs = self.focus
+            pick = (fo, fs) if (fo, fs) in cluster else next((k for k, _ in cluster.most_common() if k[0] == fo), None)
+            if pick:
+                top = pick
+            else:
+                _log(f"before: no valid failure of {fo} ({fs}) reproduced; repairing the largest cluster {top} instead")
         ph = {"seeds": seeds, **_rate(res), "oracle_solved": sum(r["oracle"]["success"] for r in res),
               "excluded_unsolvable": dict(n_unsolvable),
               "clusters": [{"obj": o, "skill": s, "count": c, "labels": dict(labels[(o, s)])}

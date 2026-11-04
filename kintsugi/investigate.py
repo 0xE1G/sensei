@@ -228,6 +228,7 @@ class Investigator:
         # 4. ledger and scores
         cases_out = [self._ledger(it) for it in items]
         report = {"run_id": self.run_id, "library": self.library_name, "backend": self.client.backend,
+                  "second_look": ("images" if self.look_images else "text") if self.vision else "off",
                   "model": self.client.model, "metrics": _metrics(cases_out), "cases": cases_out,
                   "model_stats": self.client.stats, "wall_time_s": round(time.time() - self.t0, 1)}
         (self.out / "report.json").write_text(json.dumps(report, indent=1, default=float))

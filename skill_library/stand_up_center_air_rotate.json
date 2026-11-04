@@ -1,0 +1,120 @@
+{
+  "name": "stand_up_center_air_rotate",
+  "version": 1,
+  "kind": "stand_up",
+  "impl": "generated",
+  "code": "def primitive(obj, target, p):\n    cx = obj['center'][0]\n    cy = obj['center'][1]\n    ayaw = obj['axis_yaw']\n    blen = obj['extent_major']\n    btop = obj['top_z']\n    for _ in range(3):\n        ax = cos(ayaw)\n        ay = sin(ayaw)\n        gx = cx + ax * p['shift']\n        gy = cy + ay * p['shift']\n        gz = clip(btop - p['grasp_off'], 0.008, 0.3)\n        az = gz + p['approach']\n        move(gx, gy, az, yaw=ayaw, pitch=0.0, speed=0.2)\n        open_gripper()\n        move(gx, gy, gz, yaw=ayaw, pitch=0.0, speed=0.12)\n        close_gripper(force=25.0)\n        if holding():\n            move(gx, gy, p['lift_z'], yaw=ayaw, pitch=0.0, speed=0.15)\n            move(gx, gy, p['lift_z'], yaw=ayaw, pitch=p['stand_pitch'], speed=0.08)\n            pz = blen * 0.5 + abs(p['shift']) + p['place_extra']\n            move(gx, gy, pz, yaw=ayaw, pitch=p['stand_pitch'], speed=0.08)\n            release()\n            retreat(dz=0.08)\n            obs = look()\n            if obs:\n                if obs['height'] > obs['width'] and obs['top_z'] > blen * 0.7:\n                    break\n                cx = obs['center'][0]\n                cy = obs['center'][1]\n                ayaw = obs['axis_yaw']\n                blen = obs['extent_major']\n                btop = obs['top_z']\n                if obs['height'] > blen * 0.8:\n                    break\n            else:\n                break\n        else:\n            retreat(dz=0.05)\n            open_gripper()\n            obs = look()\n            if obs:\n                cx = obs['center'][0]\n                cy = obs['center'][1]\n                ayaw = obs['axis_yaw']\n                blen = obs['extent_major']\n                btop = obs['top_z']\n            else:\n                break",
+  "description": "Pinch the middle of the lying body with hand x along its axis, lift fully into the air, pitch to rotate the body to vertical in the air, then lower its lower end onto the table where it lay. Mid-body airborne rotation and placement differs from end-pivot lifting or open-fork levering.",
+  "check": "object is tall and narrow with long axis vertical: height > width and top_z near extent_major, versus lying flat and wide",
+  "params": {
+    "grasp_off": {
+      "default": 0.0341,
+      "range": [
+        0.005,
+        0.04
+      ],
+      "meaning": "how far below top_z the tool point pinches the side of the lying body"
+    },
+    "approach": {
+      "default": 0.1127,
+      "range": [
+        0.04,
+        0.15
+      ],
+      "meaning": "clearance height above grasp point for approach"
+    },
+    "lift_z": {
+      "default": 0.1778,
+      "range": [
+        0.15,
+        0.35
+      ],
+      "meaning": "height to lift fully clear of table before rotating in air"
+    },
+    "stand_pitch": {
+      "default": 1.4328,
+      "range": [
+        0.8,
+        1.45
+      ],
+      "meaning": "pitch change to swing mid-grasped body from horizontal to vertical in air"
+    },
+    "place_extra": {
+      "default": 0.0262,
+      "range": [
+        0.0,
+        0.03
+      ],
+      "meaning": "extra tool height above half length when setting lower end on table"
+    },
+    "shift": {
+      "default": 0.0234,
+      "range": [
+        -0.03,
+        0.03
+      ],
+      "meaning": "grasp offset along lying axis from center, positive toward axis_yaw direction"
+    }
+  },
+  "lineage": [
+    {
+      "version": 1,
+      "source": "model-written primitive",
+      "run_id": "20261102-215706_eval_skills/spark_stand_up",
+      "date": "2026-11-02",
+      "written_by": {
+        "job": "propose_primitive",
+        "backend": "spark",
+        "model": "muse-spark-1.3-contributor",
+        "prompt_version": "7",
+        "input_hash": "141e3950add3",
+        "cached": false,
+        "repairs": 0,
+        "usage": {
+          "prompt_tokens": 1906,
+          "completion_tokens": 22669
+        },
+        "latency_s": 323.24
+      },
+      "attempts": 1,
+      "capability": "stand_up",
+      "task": "stand_up",
+      "task_spec": null,
+      "program": "use('stand_up', find_one(id='bottle'))",
+      "description": "stand an object that lies on its side (fallen over) back up on one of its ends, where it lies; its long axis must end vertical",
+      "trials_simulated": 522,
+      "results": {
+        "held_out": [
+          0,
+          16,
+          16
+        ],
+        "p_value": 1.5e-05
+      },
+      "note": "created in the 2026-11-02 Spark evaluation (dry run), added to the user library 2026-11-03"
+    },
+    {
+      "version": 1,
+      "source": "contribution",
+      "date": "2026-11-04",
+      "run_id": "20261104-054226_reverify_base",
+      "gate": {
+        "requests": {
+          "stand_up": {
+            "with": [
+              15,
+              16
+            ],
+            "without": [
+              16,
+              16
+            ],
+            "mode": "hold",
+            "p": 0.5
+          }
+        },
+        "regression_pass": true
+      }
+    }
+  ]
+}

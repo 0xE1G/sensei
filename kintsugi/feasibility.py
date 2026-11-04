@@ -20,7 +20,7 @@ from .skills.library import OPEN_WIDTH
 from .sim.templates import capability_for
 from .tasks.planner import fits, grasp_preference
 
-SURFACES = {"tray", "zone"}            # targets an object can be slid onto
+SURFACES = {"zone"}                    # targets an object can be slid onto: flat only (a tray's 1.5 cm lip stops it)
 REACH_R = (0.30, 0.75)                 # m from the robot base; the placer keeps objects inside (0.33, 0.72)
 
 

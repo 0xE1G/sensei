@@ -106,7 +106,7 @@ function useLivePlayer(jobId, running, onSavedEnd) {
             if (buf.current === b) {
               for (const l of r.lines) {
                 if (l.type === "f") b.frames.push(l);
-                else if (l.type === "scene") b.scene = { bodies: l.bodies, geoms: l.geoms };
+                else if (l.type === "scene") b.scene = { bodies: l.bodies, geoms: l.geoms, table_texture: l.table_texture };
                 else if (l.type === "meta") b.meta = l;
                 else if (l.type === "e") b.events.push(l);
                 else if (l.type === "done") { b.done = true; b.result = l; }
@@ -167,24 +167,56 @@ const SUGGEST_ICONS = [
 ];
 const suggestIcon = (text) => SUGGEST_ICONS.find(([re]) => re.test(text))[1];
 
-function Composer({ info, prompt, setPrompt, backend, setBackend, onSubmit, busy, locked }) {
+// A photo picked or dropped -> {dataUrl, name}, downscaled in the browser (longest side 1600 px, JPEG)
+async function readPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return { dataUrl: c.toDataURL("image/jpeg", 0.9), name: file.name };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function Composer({ info, prompt, setPrompt, backend, setBackend, onSubmit, busy, locked, photo, setPhoto }) {
   const grow = (el) => { if (el) { el.style.height = "auto"; el.style.height = `${Math.max(72, Math.min(el.scrollHeight, 200))}px`; } };
   const ref = useRef(null);
+  const [drag, setDrag] = useState(false);
   useEffect(() => grow(ref.current), [prompt]);
-  const canSend = prompt.trim() && !busy && !locked;
+  const canSend = (prompt.trim() || photo) && !busy && !locked;
+  const take = async (file) => { if (file && file.type.startsWith("image/")) setPhoto(await readPhoto(file)); };
   return (
     <section className="composer3">
       <form onSubmit={(e) => { e.preventDefault(); if (canSend) onSubmit(); }}>
-        <div className={`prompt-box ${locked ? "locked" : ""}`}>
+        <div className={`prompt-box ${locked ? "locked" : ""} ${drag ? "drag" : ""}`}
+             onDragOver={(e) => { if (!locked) { e.preventDefault(); setDrag(true); } }} onDragLeave={() => setDrag(false)}
+             onDrop={(e) => { e.preventDefault(); setDrag(false); if (!locked) take(e.dataTransfer.files?.[0]); }}>
           <div className="prompt-label">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
             New task
           </div>
+          {photo && (
+            <div className="photo-chip">
+              <img src={photo.dataUrl} alt="" />
+              <span><b>Photo of your table</b><span className="sub">the robot rebuilds it in simulation · the request is optional</span></span>
+              <button type="button" aria-label="Remove photo" title="Remove photo" onClick={() => setPhoto(null)}>×</button>
+            </div>
+          )}
           <textarea ref={ref} rows={3} value={prompt} disabled={locked}
-                    placeholder={locked ? "A job is running…" : "Describe a task for the robot, e.g. sort the blocks onto the trays of the same colour"}
+                    placeholder={locked ? "A job is running…" : photo
+                      ? "Optional: what should the robot do? Leave empty and Muse Spark proposes a task from the photo"
+                      : "Describe a task for the robot, e.g. sort the blocks onto the trays of the same colour"}
                     onChange={(e) => setPrompt(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form.requestSubmit(); } }} />
           <div className="prompt-tools">
+            <label className={`photo-btn ${locked ? "off" : ""}`} title="Start from a photo of a real table: it becomes the simulated scene">
+              <input type="file" accept="image/*" hidden disabled={locked}
+                     onChange={(e) => { take(e.target.files?.[0]); e.target.value = ""; }} />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+              Photo
+            </label>
             {info && (
               <label className="model-select" title="Model that reads the request and writes the plan">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>
@@ -193,7 +225,7 @@ function Composer({ info, prompt, setPrompt, backend, setBackend, onSubmit, busy
                 </select>
               </label>
             )}
-            <span className="prompt-hint">{locked ? "Stop the running job to plan a new one" : "Enter to plan · Shift + Enter for a new line"}</span>
+            <span className="prompt-hint">{locked ? "Stop the running job to plan a new one" : photo ? "Enter to build the scene from the photo" : "Enter to plan · Shift + Enter for a new line · drop a photo to start from a real table"}</span>
             <button className={`send ${busy ? "busy" : ""}`} disabled={!canSend} aria-label="Plan" title="Plan">
               {busy ? <span className="spinner" /> : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>}
             </button>
@@ -207,6 +239,26 @@ function Composer({ info, prompt, setPrompt, backend, setBackend, onSubmit, busy
           ))}
         </div>
       </form>
+    </section>
+  );
+}
+
+// From a photo: the photo with the boxes SAM found, and how the simulated table was made from it
+function TwinCard({ twin, task, meta }) {
+  const dets = twin.detections || [];
+  const sam = dets.filter((d) => d.source === "sam").length;
+  const placed = Object.keys(task?.layout_fixed || {}).length;
+  return (
+    <section className="card twin-card">
+      <img src={`/api/image?path=${encodeURIComponent(twin.overlay || twin.photo)}`} alt="Your photo with the objects found" />
+      <div className="twin-text">
+        <div className="card-head"><h3>From your photo</h3><Chip status="hypothesis">positions estimated</Chip></div>
+        <p className="sub">{BACKEND_SHORT[meta?.backend] || meta?.backend} named {dets.length} object{dets.length === 1 ? "" : "s"};
+          SAM 3.1 located {sam} of them ({twin.sam_calls} call{twin.sam_calls === 1 ? "" : "s"}){sam < dets.length ? `, the rest use ${BACKEND_SHORT[meta?.backend] || "the model"}'s own boxes` : ""}.
+          {placed ? ` ${placed} keep the photo's layout in every scene.` : " The placer lays the scene out."}
+          {twin.table ? " Muse Image removed the objects from the photo to make the table surface." : ""}</p>
+        {(twin.notes || []).map((n) => <p key={n} className="sub">· {n}</p>)}
+      </div>
     </section>
   );
 }
@@ -454,6 +506,7 @@ function Outcome({ result, open }) {
 export default function Studio({ open, settingsVersion = 0, openSettings }) {
   const [info, setInfo] = useState(null);
   const [prompt, setPrompt] = useState("");
+  const [photo, setPhoto] = useState(null);
   const [backend, setBackend] = useState(null);
   const [settings, setSettings] = useState({ n: 8, workers: 4, autoFix: true, retries: true, hard: false, masks: "sim" });
   const [plan, setPlan] = useState(null);
@@ -534,10 +587,10 @@ export default function Studio({ open, settingsVersion = 0, openSettings }) {
     setJob((j) => (j?.running ? j : null));
     setPlan({ phase: "spec" });
     try {
-      const spec = await studio.spec(prompt, backend);
+      const spec = photo ? await studio.photoSpec(photo.dataUrl, prompt, backend) : await studio.spec(prompt, backend);
       if (spec.status !== "ok") return setPlan({ phase: "answer", spec });
       setPlan({ phase: "program", spec });
-      const program = await studio.program(prompt, spec.task, backend);
+      const program = await studio.program(prompt.trim() || spec.task.prompt, spec.task, backend);
       setPlan({ phase: "ready", spec, program });
     } catch (e) {
       setPlan({ phase: "error", error: String(e.message || e) });
@@ -545,7 +598,7 @@ export default function Studio({ open, settingsVersion = 0, openSettings }) {
   };
   const run = async () => {
     try {
-      const j = await studio.start({ prompt, task: plan.spec.task, program: plan.program?.program,
+      const j = await studio.start({ prompt: prompt.trim() || plan.spec.task.prompt, task: plan.spec.task, program: plan.program?.program,
         program_source: plan.program?.source, n: settings.n, workers: settings.workers, retries: settings.retries,
         auto_fix: settings.autoFix, hard: settings.hard, backend, masks: settings.masks });
       attach(j.id, true);
@@ -629,7 +682,7 @@ export default function Studio({ open, settingsVersion = 0, openSettings }) {
   const showLive = job && (b || job.running);
   return (
     <div className="studio grid">
-      <Composer info={info} prompt={prompt} setPrompt={setPrompt} backend={backend} setBackend={setBackend}
+      <Composer info={info} prompt={prompt} setPrompt={setPrompt} backend={backend} setBackend={setBackend} photo={photo} setPhoto={setPhoto}
                 onSubmit={doPlan} busy={plan?.phase === "spec" || plan?.phase === "program"} locked={!!job?.running} />
       {scanned && scanned.present < scanned.total && (
         <p className="sub asset-hint">{scanned.present ? `${scanned.total - scanned.present} of ${scanned.total}` : scanned.total} household
@@ -655,14 +708,17 @@ export default function Studio({ open, settingsVersion = 0, openSettings }) {
       {!job && plan?.spec?.task && !preview && <p className="bad">No layout of this task fits on the table: try fewer or smaller objects.</p>}
       {!job && plan?.spec?.task && preview && (
         <div className="split studio-split">
-          <Viewer scene={preview.scene} meshes={meshes.data} pose={preview.frames[0]} height={440} zoom={false}>
-            <span className="badge">preview · scene 1</span>
-          </Viewer>
+          <div>
+            <Viewer scene={preview.scene} meshes={meshes.data} pose={preview.frames[0]} height={440} zoom={false}>
+              <span className="badge">{plan.spec.twin ? "digital twin of your photo" : "preview · scene 1"}</span>
+            </Viewer>
+            {plan.spec.twin && <TwinCard twin={plan.spec.twin} task={plan.spec.task} meta={plan.spec.meta} />}
+          </div>
           <section className="card">
             <PlanCard spec={plan.spec} program={plan.program} programLoading={plan.phase === "program"} />
             <Settings info={info} s={settings} set={setSettings} />
             <button className="btn primary big-btn" disabled={plan.phase !== "ready"} onClick={run}
-                    title="Each scene places the same objects differently">
+                    title={plan.spec.task?.layout_fixed ? "Every scene keeps the photo's layout; physics varies" : "Each scene places the same objects differently"}>
               Run {settings.n} scene{settings.n > 1 ? "s" : ""}</button>
             {plan.runError && <p className="bad">{plan.runError}</p>}
           </section>

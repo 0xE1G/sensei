@@ -154,7 +154,8 @@ def regression_items(cards: dict, perf: dict, patches: dict, exclude=()) -> list
 
 def _label(req) -> str:
     if req["task"] == "spec":
-        return f"spec[{req['spec'].get('name', '?')}]"
+        sp = req.get("spec") or (req.get("kwargs") or {}).get("task_spec") or {}
+        return f"spec[{sp.get('name', '?')}]"
     kw = req.get("kwargs") or {}
     if "region" in kw:
         r = kw["region"]
@@ -193,7 +194,9 @@ class Reverifier:
         cards, perf, patches = lib
         jobs = []
         for s in seeds:
-            if req.get("program") or req["task"] == "spec":
+            # created skills carry their typed request as "spec"; patch triggers keep it in kwargs["task_spec"]
+            # and run like any named task below
+            if req.get("program") or "spec" in req:
                 from .tasks.specs import make_task
                 spec = (make_task("spec", seed=s, task_spec=req["spec"]) if req["task"] == "spec"
                         else make_task(req["task"], seed=s, **(req.get("kwargs") or {})))
