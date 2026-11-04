@@ -2,8 +2,7 @@
 
 <p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
 
-<p align="center"><sub>Sorting · pushing a plate · standing a bottle up · opening a drawer · a rotated bar · a twin of a real table.
-Every skill here was built and verified by Kintsugi.</sub></p>
+<p align="center"><sub>Every skill here was built and verified by Kintsugi.</sub></p>
 
 <p align="center">
 Describe a task, or show a photo of your table. <b>Muse Spark</b> plans it and the robot runs it in physics simulation.<br>
