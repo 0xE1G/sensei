@@ -7,6 +7,7 @@
 <a href="#setup"><img src="https://img.shields.io/badge/tested_on-Windows_11-2b2b2f" alt="Tested on Windows 11"></a>
 <a href="#setup"><img src="https://img.shields.io/badge/Python-3.11-2b2b2f?logo=python&logoColor=white" alt="Python 3.11"></a>
 <a href="#setup"><img src="https://img.shields.io/badge/GPU-not_needed-2b2b2f" alt="No GPU needed"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2b2b2f" alt="License: AGPL-3.0"></a>
 </p>
 
 <p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
@@ -366,6 +367,13 @@ scripts/        command-line tools; smoke_test.py runs after every change
 - Success must be checkable by code (on, in, upright, opened, distances), so tasks like pouring liquids or folding
   cloth are out of scope.
 - Photo positions are estimates from a single image without depth (about 3 cm on test photos).
+
+## License
+
+Copyright (C) 2026 0xE1G. Kintsugi is free software under the
+[GNU Affero General Public License v3.0](LICENSE): you may use, study, change and share it. Anyone who distributes it,
+or a product built on it, or runs a changed version as a network service, must keep this notice and release their full
+source code under the same license. Third-party parts keep their own licenses (see Acknowledgements).
 
 ## Acknowledgements
 
