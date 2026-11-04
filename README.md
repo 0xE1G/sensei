@@ -83,6 +83,23 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 5. **It keeps the skill.** The skill becomes a versioned card with its parameters, preconditions, evidence and full
    lineage. The router then picks, for each object shape, the skill with the best measured success.
 
+### Skills transfer zero-shot
+
+<p align="center"><img src="docs/media/zero_shot.gif" alt="A skill found on a bowl is used zero-shot on an unseen mug and on scanned household objects" width="820"></p>
+
+A skill is defined on shapes, not object names, so the rim grasp found on one bowl picks up an unseen mug and real 3D
+scans of household objects ([Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/))
+with no new practice. A new object type gets a short verification run before the skill is trusted: 10 trials for the
+mug, instead of 900 to build a skill from scratch.
+
+### From a photo to a digital twin
+
+<p align="center"><img src="docs/media/photo_to_twin.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Image rebuilds the table; the digital twin with the task from Muse Spark" width="820"></p>
+
+Muse Spark lists the objects in the photo and proposes a task, SAM 3.1 finds each one, and Muse Image rebuilds the
+tabletop. Positions come from the photo's own geometry, so the twin keeps your layout (on 16 test photos: 70/70 objects
+found, 282/282 left/right and front/behind relations kept).
+
 ### Discover your own skills
 
 <p align="center"><img src="docs/media/skills.png" alt="The skill library: seed skills, skills found by practice, skills written by Muse Spark, and skills discovered on your machine" width="100%"></p>
@@ -93,8 +110,6 @@ Muse Spark, and proven by the gates. Every skill your robot discovers on your ma
 and contributed skills pass the same re-verification gate first.
 
 ## Built with Meta models
-
-<p align="center"><img src="docs/media/meta_pipeline.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Spark writes the task and plan; Muse Image and MuJoCo rebuild it as a digital twin where the robot does the task" width="100%"></p>
 
 Every model the software calls is a Meta model, reached through the **Meta Model API** (`https://api.meta.ai/v1`).
 The simulation, search and statistics are ordinary code on the CPU.
