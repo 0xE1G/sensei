@@ -100,14 +100,70 @@ then works in a digital twin of your workspace.
 
 ## Built with Meta models
 
-| Model | What it does here |
-|---|---|
-| **Muse Spark** | task specs, clarifying questions and refusals; plan programs; failure diagnosis; failure-search proposals; new skill code |
-| **SAM 3.1** | finds each object in a real photo |
-| **Muse Image** | recreates the empty tabletop from a photo |
+Every model the software calls is a Meta model, reached through the **Meta Model API** (`https://api.meta.ai/v1`).
+Nothing runs on our own model compute: the simulation, search and statistics are ordinary code on the CPU.
 
-Every model the software calls is a Meta model. Every model output is schema-validated, cached and logged. A
-rule-based offline mode runs the standard tasks with no model at all.
+| Model | Model ID | Endpoint | What it does here |
+|---|---|---|---|
+| **Muse Spark** | `muse-spark-1.3-contributor` (set in Settings) | `POST /chat/completions` | task specs, clarifying questions and refusals; plan programs; failure diagnosis (with images when stuck); failure-search proposals; skill retrieval; new skill code |
+| **SAM 3.1** | `sam-3.1` | `POST /responses` | finds each object in a real photo (boxes) |
+| **Muse Image** | `muse-image-1.0` | `POST /images/edits` | removes the objects from a photo to recreate the empty tabletop |
+
+Every model output is checked against a JSON schema and a semantic validator (errors are fed back once, then the answer
+is rejected with the reasons), cached, and logged with its model, prompt version and tokens. A rule-based offline mode
+runs the standard tasks with no model at all.
+
+### Checking the model calls
+
+- **In the app:** the *Meta model calls* panel (top right) lists every call as it happens: model ID, what it is doing,
+  real duration and tokens. Click a call to see its endpoint and the request ID returned by the Meta Model API.
+- **On disk:** `cache/llm/live_calls.jsonl` has one start and one end line per call (model, endpoint, request ID,
+  duration, tokens, errors), including calls made by Studio jobs. `cache/llm/calls.jsonl` logs every answer with its
+  job, prompt version and validation repairs. Cached answers make no call and are marked `cached`.
+- Run the server with `KINTSUGI_NO_CACHE=1` to make every request a fresh call.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["Web app<br/>React + Three.js"] -- "HTTP /api" --> S["FastAPI server"]
+    S -- "starts" --> J["Studio job<br/>(own process)"]
+    J --> W["Simulation workers<br/>MuJoCo, in parallel on the CPU"]
+    S & J --> M["Model client<br/>schemas · validators · cache · call log"]
+    M -- "HTTPS" --> META[("Meta Model API<br/>Muse Spark · SAM 3.1 · Muse Image")]
+    J --> LIB[("Skill library<br/>base + user")]
+    W -- "pose logs, records" --> RUNS[("runs/")]
+    RUNS --> S
+```
+
+**How a request flows.** A typed request (or a photo) goes to Muse Spark, which returns a task spec: objects, goals and
+constraints, validated and clipped to tested ranges. A deterministic placer builds the MuJoCo scene. Muse Spark writes
+a short plan program over the skill API, which a sandboxed interpreter (AST whitelist) runs on 8 scenes in parallel.
+Skills see only what the cameras perceive (depth, segmentation, point-cloud descriptors) and the robot's own joints;
+the true simulator state is used only to grade the outcome and to label failures. When a step fails, an expert with
+privileged state checks that it was solvable, the investigator replays the exact scene and tests Muse Spark's proposed
+causes one change at a time, and the explorer searches grasp candidates, parameter patches or new model-written motion
+code (search + Optuna tuning). A change is kept only if pre-declared gates pass: it fixes the failure (paired McNemar
+test), holds on held-out objects, and breaks no earlier task. Then the same scenes run again.
+
+**Components.** `web/` is the React + Vite + react-three-fiber app; physics never runs in the browser, which replays
+recorded poses. `server/app.py` (FastAPI) serves saved runs, skills and settings and starts one Studio job at a time
+(`kintsugi/studio.py`) in its own process, which streams progress and live frames to the browser. The simulation
+(`kintsugi/sim/`), perception, skills, executor, investigator, explorer and skill creator are Python packages under
+`kintsugi/`. All model calls go through one client (`kintsugi/agents/llm.py`) with versioned prompts, schemas and
+validators per job.
+
+**Hosting.** Runs locally (Windows, macOS, Linux; laptop CPU, no GPU). There is no hosted version; the setup below
+starts both the server and the app.
+
+**Keys.** The Meta Model API key is entered in the app's Settings (or `META_API_KEY`) and stored only in
+`config/local.json`, which git ignores. It is never sent anywhere except the Meta Model API and is shown only as its
+last four characters.
+
+**Third-party parts (not AI models).** MuJoCo (physics), the Franka Panda model from MuJoCo Menagerie, mink (inverse
+kinematics), Optuna (parameter search), Google Scanned Objects (household object meshes), FastAPI, React and three.js.
+Everything else in this repository (scene templates, perception descriptors, skills, executor, investigator, search,
+gates, skill creation, Studio and app) was written for this project.
 
 ## Quick start
 

@@ -873,6 +873,19 @@ round started by the search (see status).
    call). The diagnosis headline 87.5% is Spark's own (runs/20261102-200139_investigate, seed library). Old Claude
    comparison numbers above are development history, not product claims. Dark is the only theme (the
    prefers-color-scheme blocks in styles.css unwrapped; index.html declares color-scheme dark). Smoke 32/32.
+8u. **Live Meta model call panel + submission video (2026-11-04)**: `kintsugi/agents/calllog.py` `live_call(model, job,
+   detail, endpoint)` writes start/end lines (endpoint, request ID returned by the API, latency, tokens, errors) to
+   cache/llm/live_calls.jsonl for every Muse Spark (llm.py), SAM 3.1 (sam.segment) and Muse Image (twin.table_texture)
+   call, also from Studio job processes; GET /api/model_calls?since=; `web/src/calls.jsx` = "Meta model calls" panel top
+   right (live rows, click = endpoint + request ID). launch config "api-live" = server with KINTSUGI_NO_CACHE=1 (every
+   request a fresh call). README: model IDs + endpoints table, "Checking the model calls", Architecture section (flow,
+   components, hosting, keys, third-party parts). Live Studio run for the film: "Open the cabinet door." -> 0/8
+   (missing open_door) -> Spark wrote 3 strategies -> picked open_door_pinch_top_edge_swing_open, tune 7/8 fresh, gate
+   held-out 15/16 vs 0/16 (p 3.1e-05), regression pass -> re-run 8/8, 16 min (runs/20261104-143103_studio; card in the
+   USER library, not contributed yet). Film (git-ignored film/video): composition "Demo" = Why slide -> Hook -> Title ->
+   Engine -> real recordings with live calls (sort, call details + Settings, door creation time-lapse labelled with real
+   time, door replay, photo twin, Investigator, Experiments, Skills) -> Architecture -> SearchGates -> Reliable -> Close;
+   2:58, no voice yet (out/kintsugi_demo_v2.mp4).
 9b. Later (user, 2026-11-02): learn a task from a video (Spark video input + SAM 3.1 tracking -> spec + plan
    program, verified as a composite; measured on rendered expert clips first) and task from a photo (goal photo ->
    measurable goals; photo of a real table -> simulated copy). See docs/implementation_plan.md optional 1 / 1b.

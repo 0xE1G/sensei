@@ -1068,8 +1068,14 @@ h1, h2, h3, .page-head h2, .kpi-value, .big, .banner-text, .exp-header h2, .side
 .mc-x { border: none; background: none; color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px; }
 .mc-x:hover { color: var(--ink); }
 .mc-list { list-style: none; margin: 0; padding: 6px 0; }
-.mc-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 14px; }
-.mc-row + .mc-row { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.mc-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 14px;
+  width: 100%; border: none; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mc-row:hover, .mc-item.open .mc-row { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.mc-item + .mc-item { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.mc-detail { margin: 0; padding: 4px 14px 10px 44px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px;
+  font-size: 11.5px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.mc-detail dt { color: var(--muted); }
+.mc-detail dd { margin: 0; font-family: "JetBrains Mono", ui-monospace, monospace; color: var(--ink); overflow-wrap: anywhere; }
 .mc-icon { display: grid; place-items: center; font-size: 13px; color: #5cc58a; }
 .mc-row.bad .mc-icon { color: var(--rejected); }
 .mc-spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid color-mix(in srgb, #4f8ff7 30%, transparent);

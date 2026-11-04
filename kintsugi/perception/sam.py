@@ -77,8 +77,10 @@ def segment(image_path, phrase: str, min_conf: float = 0.3, timeout: float = 120
     from ..agents.calllog import live_call
     for attempt in range(retries + 1):
         try:
-            with live_call(MODEL, "segment", phrase), urllib.request.urlopen(req, timeout=timeout) as r:
+            with live_call(MODEL, "segment", phrase, endpoint=base.rstrip("/") + "/responses") as rec, \
+                    urllib.request.urlopen(req, timeout=timeout) as r:
                 res = json.loads(r.read())
+                rec["request_id"] = res.get("id")
             break
         except urllib.error.HTTPError as e:            # the API's message, never the request (holds the key)
             msg = f"SAM HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}"

@@ -34,9 +34,12 @@ def _write(rec: dict) -> None:
 
 
 @contextlib.contextmanager
-def live_call(model: str, job: str, detail: str = ""):
+def live_call(model: str, job: str, detail: str = "", endpoint: str = ""):
+    """endpoint: the URL the request goes to (no key). The block may set rec["request_id"] (the API's response id)
+    and rec["tokens"]."""
     cid, t0 = uuid.uuid4().hex[:12], time.time()
-    base = {"id": cid, "model": model, "job": job, "detail": str(detail)[:80], "pid": os.getpid()}
+    base = {"id": cid, "model": model, "job": job, "detail": str(detail)[:80], "pid": os.getpid(),
+            **({"endpoint": endpoint} if endpoint else {})}
     _write({**base, "event": "start", "t": t0})
     rec: dict = {}
     try:
@@ -46,7 +49,8 @@ def live_call(model: str, job: str, detail: str = ""):
                 "error": f"{type(e).__name__}: {e}"[:160]})
         raise
     _write({**base, "event": "end", "t": time.time(), "ok": True, "latency_s": round(time.time() - t0, 2),
-            **({"tokens": rec["tokens"]} if rec.get("tokens") else {})})
+            **({"tokens": rec["tokens"]} if rec.get("tokens") else {}),
+            **({"request_id": str(rec["request_id"])[:80]} if rec.get("request_id") else {})})
 
 
 def recent(since: float = 0.0, limit: int = 12) -> list[dict]:
@@ -65,12 +69,12 @@ def recent(since: float = 0.0, limit: int = 12) -> list[dict]:
         except json.JSONDecodeError:
             continue
         c = calls.setdefault(r["id"], {"id": r["id"], "model": r.get("model"), "job": r.get("job"),
-                                       "detail": r.get("detail", "")})
+                                       "detail": r.get("detail", ""), "endpoint": r.get("endpoint")})
         if r.get("event") == "start":
             c["start"] = r["t"]
         else:
             c.update(end=r["t"], ok=r.get("ok"), latency_s=r.get("latency_s"), tokens=r.get("tokens"),
-                     error=r.get("error"))
+                     error=r.get("error"), request_id=r.get("request_id"))
     out = [c for c in calls.values() if c.get("start", 0) >= since]
     out.sort(key=lambda c: c["start"])
     now = time.time()

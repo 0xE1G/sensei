@@ -152,10 +152,13 @@ class ModelClient:
         messages_user = user
         for attempt in range(2):
             from .calllog import live_call
-            with live_call(self.model, job.name, "repair" if attempt else "") as rec:
+            from .. import settings as _settings
+            endpoint = (_settings.get("meta_api_base") or "").rstrip("/") + "/chat/completions"
+            with live_call(self.model, job.name, "repair" if attempt else "", endpoint=endpoint) as rec:
                 raw, usage = self._call(system, messages_user, images, effort=effort,
                                         schema=(job.name, job.schema) if schema else None)
                 rec["tokens"] = int((usage or {}).get("prompt_tokens") or 0) + int((usage or {}).get("completion_tokens") or 0)
+                rec["request_id"] = (usage or {}).pop("_response_id", None)
             self.stats["calls"] += 1
             if usage:
                 meta["usage"] = {k: meta.get("usage", {}).get(k, 0) + int(usage.get(k) or 0)
@@ -268,4 +271,6 @@ def _call_openai_compatible(system: str, user: str, model: str, timeout: float =
             raise RuntimeError(f"Meta API unreachable after {retries + 1} attempts: {type(e).__name__}: {e}") from None
     if usage_out is not None:
         usage_out.update(res.get("usage") or {})
+        if res.get("id"):
+            usage_out["_response_id"] = res["id"]          # shown with the call in the app (no secret)
     return res["choices"][0]["message"]["content"]

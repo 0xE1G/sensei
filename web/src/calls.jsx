@@ -30,6 +30,7 @@ function tokens(n) {
 export default function ModelCalls() {
   const [calls, setCalls] = useState([]);
   const [hidden, setHidden] = useState(false);
+  const [open, setOpen] = useState(null);       // the call whose details are shown
   const since = useRef(null);
 
   useEffect(() => {
@@ -66,7 +67,9 @@ export default function ModelCalls() {
         {calls.slice(-MAX_ROWS).map((c) => {
           const state = !("end" in c) ? "run" : c.ok ? "ok" : "bad";
           return (
-            <li key={c.id} className={`mc-row ${state}`}>
+            <li key={c.id} className={`mc-item ${open === c.id ? "open" : ""}`}>
+              <button type="button" className={`mc-row ${state}`} onClick={() => setOpen(open === c.id ? null : c.id)}
+                      title="Show the endpoint and request ID">
               <span className="mc-icon">{state === "run" ? <span className="mc-spin" /> : state === "ok" ? "✓" : "✗"}</span>
               <span className="mc-main">
                 <span className="mc-model">{c.model}</span>
@@ -76,6 +79,15 @@ export default function ModelCalls() {
                 {state === "run" ? "calling…" : state === "bad" ? <span title={c.error}>failed</span> :
                   <>{c.latency_s != null && <b>{c.latency_s.toFixed(1)} s</b>}{tokens(c.tokens) && <em>{tokens(c.tokens)}</em>}</>}
               </span>
+              </button>
+              {open === c.id && (
+                <dl className="mc-detail">
+                  <dt>endpoint</dt><dd>{c.endpoint || "–"}</dd>
+                  <dt>request ID</dt><dd>{c.request_id || (state === "run" ? "waiting for the answer" : "–")}</dd>
+                  <dt>started</dt><dd>{new Date(c.start * 1000).toLocaleTimeString()}</dd>
+                  {c.error && <><dt>error</dt><dd>{c.error}</dd></>}
+                </dl>
+              )}
             </li>
           );
         })}
