@@ -1,4 +1,14 @@
-<p align="center"><img src="docs/media/banner.png" alt="Kintsugi: a robot that builds its own skills, and proves they work" width="100%"></p>
+<p align="center"><img src="docs/media/banner.png" alt="Kintsugi" width="100%"></p>
+
+<p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
+
+<p align="center"><sub>Sorting · pushing a plate · standing a bottle up · opening a drawer · a rotated bar · a twin of a real table.
+Every skill here was built and verified by Kintsugi.</sub></p>
+
+<p align="center">
+<a href="https://youtu.be/abXK6yvgmlE"><img src="docs/media/video.jpg" alt="Watch the 3-minute demo" width="300"></a><br>
+<a href="https://youtu.be/abXK6yvgmlE"><b>▶ Watch the 3-minute demo</b></a>
+</p>
 
 <p align="center">
 Describe a task, or show a photo of your table. <b>Muse Spark</b> plans it and the robot runs it in physics simulation.<br>
@@ -7,18 +17,8 @@ on scenes it has never seen. No training, no GPU, about a cent per new skill, on
 </p>
 
 <p align="center">
-<a href="https://youtu.be/abXK6yvgmlE"><img src="docs/media/video.jpg" alt="Watch the 3-minute demo" width="380"></a><br>
-<a href="https://youtu.be/abXK6yvgmlE"><b>▶ Watch the 3-minute demo</b></a>
-</p>
-
-<p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
-<p align="center"><sub>Sorting · pushing a plate · standing a bottle up · opening a drawer · a rotated bar · a twin of a real table.
-Every skill here was built and verified by Kintsugi.</sub></p>
-
-<p align="center">
-<a href="#see-it-work">See it work</a> · <a href="#how-it-works">How it works</a> · <a href="#the-core-engine">Core engine</a> ·
-<a href="#results">Results</a> · <a href="#built-with-meta-models">Meta models</a> · <a href="#architecture">Architecture</a> ·
-<a href="#setup">Setup</a>
+<a href="#see-it-work">See it work</a> · <a href="#how-it-works">How it works</a> · <a href="#built-with-meta-models">Meta models</a> · <a href="#the-core-engine">Core engine</a> ·
+<a href="#results">Results</a> · <a href="#setup">Setup</a> · <a href="#architecture">Architecture</a>
 </p>
 
 ## Why Kintsugi
@@ -88,6 +88,28 @@ Muse Spark, and proven by the gates. Every skill your robot discovers on your ma
 (`user_library/`, never committed). Share skills with `python scripts/skills.py export | import | contribute`: imported
 and contributed skills pass the same re-verification gate first.
 
+## Built with Meta models
+
+Every model the software calls is a Meta model, reached through the **Meta Model API** (`https://api.meta.ai/v1`).
+The simulation, search and statistics are ordinary code on the CPU.
+
+| Model | Model ID | Endpoint | What it does here |
+|---|---|---|---|
+| **Muse Spark** | `muse-spark-1.3` by default (any ID your key lists, set in Settings) | `POST /chat/completions` | task specs, clarifying questions and refusals; plan programs; failure diagnosis (with images when stuck); failure-search proposals; skill retrieval; new skill code |
+| **SAM 3.1** | `sam-3.1` | `POST /responses` | finds each object in a real photo |
+| **Muse Image** | `muse-image-1.0` | `POST /images/edits` | rebuilds the empty tabletop from a photo, for the digital twin |
+
+A rule-based offline mode runs the standard tasks with no model at all.
+
+### Checking the model calls
+
+- **In the app:** the *Meta model calls* panel (top right) lists every call as it happens: model ID, what it is doing,
+  real duration and tokens. Click a call to see its endpoint and the request ID returned by the Meta Model API.
+- **On disk:** `cache/llm/live_calls.jsonl` has one start and one end line per call (model, endpoint, request ID,
+  duration, tokens, errors), including calls made by Studio jobs. `cache/llm/calls.jsonl` logs every answer with its
+  job, prompt version and validation repairs. Cached answers make no call and are marked `cached`.
+- Run the server with `KINTSUGI_NO_CACHE=1` to make every request a fresh call.
+
 ## The core engine
 
 <p align="center"><img src="docs/media/engine_diagram.png" alt="The core engine: plan and run; when a step fails: failure search, expert check, Muse Spark diagnosis, then a patch search, the explorer or Muse Spark writing new skill code; gates, skill library, retrieval" width="100%"></p>
@@ -129,47 +151,6 @@ All numbers are measured in simulation on fixed seeds, with held-out objects nev
 | **Diagnosis** | Muse Spark names the right failure cause **87.5%** of the time, and every proposed cause is tested |
 | **Failure search** | adversarial search finds **90.6** failures per 100 scenes on the seed library, **7.3** after the repair rounds |
 | **Photo to scene** | 16 test photos: **70/70** objects found, **282/282** left/right and front/behind relations kept |
-
-## Built with Meta models
-
-Every model the software calls is a Meta model, reached through the **Meta Model API** (`https://api.meta.ai/v1`).
-The simulation, search and statistics are ordinary code on the CPU.
-
-| Model | Model ID | Endpoint | What it does here |
-|---|---|---|---|
-| **Muse Spark** | `muse-spark-1.3` by default (any ID your key lists, set in Settings) | `POST /chat/completions` | task specs, clarifying questions and refusals; plan programs; failure diagnosis (with images when stuck); failure-search proposals; skill retrieval; new skill code |
-| **SAM 3.1** | `sam-3.1` | `POST /responses` | finds each object in a real photo |
-| **Muse Image** | `muse-image-1.0` | `POST /images/edits` | rebuilds the empty tabletop from a photo, for the digital twin |
-
-A rule-based offline mode runs the standard tasks with no model at all.
-
-### Checking the model calls
-
-- **In the app:** the *Meta model calls* panel (top right) lists every call as it happens: model ID, what it is doing,
-  real duration and tokens. Click a call to see its endpoint and the request ID returned by the Meta Model API.
-- **On disk:** `cache/llm/live_calls.jsonl` has one start and one end line per call (model, endpoint, request ID,
-  duration, tokens, errors), including calls made by Studio jobs. `cache/llm/calls.jsonl` logs every answer with its
-  job, prompt version and validation repairs. Cached answers make no call and are marked `cached`.
-- Run the server with `KINTSUGI_NO_CACHE=1` to make every request a fresh call.
-
-## Architecture
-
-<p align="center"><img src="docs/media/architecture.png" alt="Web app, server, Studio job, simulation workers, Meta Model API, gates, skill library, and what stays on your machine" width="100%"></p>
-
-- **Web app** (`web/`, React + Vite + react-three-fiber): the Studio, Episodes, Progress, Investigator, Experiments and
-  Skills pages. Physics never runs in the browser; it replays recorded poses and live frames.
-- **Server** (`server/app.py`, FastAPI): serves runs, skills and settings, starts one Studio job at a time in its own
-  process, and streams progress and live frames.
-- **Engine** (`kintsugi/`): simulation and scene templates (`sim/`), perception, skills and router (`skills/`), the
-  executor and the plan-program sandbox, the investigator, the explorer and failure search (`search/`), the skill
-  creator and reviser, auto-repair, the photo twin, and one model client for every job (`agents/`).
-- **Skill library**: `skill_library/` is the base library (tracked in git); everything the robot discovers on your
-  machine goes to `user_library/` (git-ignored). `scripts/skills.py` exports skill packs and imports or contributes them
-  through the same re-verification gate.
-- **Keys** stay on your computer in `config/local.json` (git-ignored) and are shown only as their last four characters.
-- **Third-party parts (not AI models):** MuJoCo, the Franka Panda model from MuJoCo Menagerie, mink (inverse
-  kinematics), Optuna (Bayesian search), Google Scanned Objects (household object meshes), FastAPI, React and three.js.
-  Everything else in this repository was written for this project.
 
 ## Setup
 
@@ -262,6 +243,25 @@ export META_MODEL="muse-spark-1.3"             # optional
 - **Port 8000 busy:** use `--port 8001` and open that port instead.
 - **Slow on a small machine:** lower **In parallel** in the Studio's run settings (default: CPU cores − 1, at most 8).
 - **"Test connection" fails:** check the key, and that your key lists the model ID shown under *Advanced*.
+
+## Architecture
+
+<p align="center"><img src="docs/media/architecture.png" alt="Web app, server, Studio job, simulation workers, Meta Model API, gates, skill library, and what stays on your machine" width="100%"></p>
+
+- **Web app** (`web/`, React + Vite + react-three-fiber): the Studio, Episodes, Progress, Investigator, Experiments and
+  Skills pages. Physics never runs in the browser; it replays recorded poses and live frames.
+- **Server** (`server/app.py`, FastAPI): serves runs, skills and settings, starts one Studio job at a time in its own
+  process, and streams progress and live frames.
+- **Engine** (`kintsugi/`): simulation and scene templates (`sim/`), perception, skills and router (`skills/`), the
+  executor and the plan-program sandbox, the investigator, the explorer and failure search (`search/`), the skill
+  creator and reviser, auto-repair, the photo twin, and one model client for every job (`agents/`).
+- **Skill library**: `skill_library/` is the base library (tracked in git); everything the robot discovers on your
+  machine goes to `user_library/` (git-ignored). `scripts/skills.py` exports skill packs and imports or contributes them
+  through the same re-verification gate.
+- **Keys** stay on your computer in `config/local.json` (git-ignored) and are shown only as their last four characters.
+- **Third-party parts (not AI models):** MuJoCo, the Franka Panda model from MuJoCo Menagerie, mink (inverse
+  kinematics), Optuna (Bayesian search), Google Scanned Objects (household object meshes), FastAPI, React and three.js.
+  Everything else in this repository was written for this project.
 
 ## Command-line tools
 
