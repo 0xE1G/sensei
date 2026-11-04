@@ -74,9 +74,10 @@ def segment(image_path, phrase: str, min_conf: float = 0.3, timeout: float = 120
     req = urllib.request.Request(base.rstrip("/") + "/responses", data=json.dumps(body).encode(),
                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
     t0 = time.time()
+    from ..agents.calllog import live_call
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with live_call(MODEL, "segment", phrase), urllib.request.urlopen(req, timeout=timeout) as r:
                 res = json.loads(r.read())
             break
         except urllib.error.HTTPError as e:            # the API's message, never the request (holds the key)

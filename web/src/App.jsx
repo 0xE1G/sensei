@@ -8,6 +8,7 @@ import Investigator from "./panels/Investigator.jsx";
 import Experiments from "./panels/Experiments.jsx";
 import Skills from "./panels/Skills.jsx";
 import { AssetGate, SettingsDrawer } from "./panels/Settings.jsx";
+import ModelCalls from "./calls.jsx";
 
 // Small inline icons (24px grid, stroke = currentColor); no icon library.
 const ICONS = {
@@ -74,6 +75,7 @@ export default function App() {
         </div>
       </header>
       {showSettings && <SettingsDrawer onClose={() => setShowSettings(false)} onChanged={() => setSettingsVersion((v) => v + 1)} />}
+      <ModelCalls />
       <AssetGate>
       <main className="content">
         <header className="page-head">

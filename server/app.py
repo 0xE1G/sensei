@@ -636,6 +636,13 @@ import threading
 _dl = {"which": None, "done": 0, "total": 0, "label": "", "error": None, "finished": None, "running": False}
 
 
+@app.get("/api/model_calls")
+def model_calls(since: float = 0.0):
+    """Meta model calls that started at or after `since` (server time), live: the app shows them as they happen."""
+    from kintsugi.agents.calllog import recent
+    return {"now": time.time(), "calls": recent(since)}
+
+
 @app.get("/api/settings")
 def get_settings():
     from kintsugi import settings

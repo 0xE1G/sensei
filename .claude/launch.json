@@ -8,6 +8,12 @@
       "port": 8000
     },
     {
+      "name": "api-live",
+      "runtimeExecutable": "C:/Users/yahya/anaconda3/envs/kintsugi/python.exe",
+      "runtimeArgs": ["-c", "import os; os.environ['KINTSUGI_NO_CACHE'] = '1'; import uvicorn; uvicorn.run('server.app:app', port=8000)"],
+      "port": 8000
+    },
+    {
       "name": "web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "web", "run", "dev"],

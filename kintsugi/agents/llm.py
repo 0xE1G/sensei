@@ -151,8 +151,11 @@ class ModelClient:
         out, raw = None, None
         messages_user = user
         for attempt in range(2):
-            raw, usage = self._call(system, messages_user, images, effort=effort,
-                                    schema=(job.name, job.schema) if schema else None)
+            from .calllog import live_call
+            with live_call(self.model, job.name, "repair" if attempt else "") as rec:
+                raw, usage = self._call(system, messages_user, images, effort=effort,
+                                        schema=(job.name, job.schema) if schema else None)
+                rec["tokens"] = int((usage or {}).get("prompt_tokens") or 0) + int((usage or {}).get("completion_tokens") or 0)
             self.stats["calls"] += 1
             if usage:
                 meta["usage"] = {k: meta.get("usage", {}).get(k, 0) + int(usage.get(k) or 0)

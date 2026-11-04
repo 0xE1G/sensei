@@ -264,8 +264,9 @@ def table_texture(photo, out_dir: pathlib.Path, timeout: float = 180) -> dict:
     req = urllib.request.Request(base.rstrip("/") + "/images/edits", data=json.dumps(body).encode(),
                                  headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
     t0 = time.time()
+    from .agents.calllog import live_call
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with live_call(IMAGE_MODEL, "empty_table"), urllib.request.urlopen(req, timeout=timeout) as r:
             res = json.loads(r.read())
     except urllib.error.HTTPError as e:                # the API's message, never the request (holds the key)
         raise RuntimeError(f"Muse Image HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from None
