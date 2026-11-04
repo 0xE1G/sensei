@@ -6,7 +6,10 @@
 <a href="#built-with-meta-models"><img src="https://img.shields.io/badge/Built_on-Muse_Image-0064E0?logo=meta&logoColor=white" alt="Built on Muse Image"></a>
 <a href="#setup"><img src="https://img.shields.io/badge/tested_on-Windows_11-2b2b2f" alt="Tested on Windows 11"></a>
 <a href="#setup"><img src="https://img.shields.io/badge/Python-3.11-2b2b2f?logo=python&logoColor=white" alt="Python 3.11"></a>
-<a href="#setup"><img src="https://img.shields.io/badge/GPU-not_needed-2b2b2f" alt="No GPU needed"></a>
+<a href="https://mujoco.org"><img src="https://img.shields.io/badge/MuJoCo-physics-2b2b2f" alt="MuJoCo"></a>
+<a href="https://optuna.org"><img src="https://img.shields.io/badge/Optuna-Bayesian_search-2b2b2f" alt="Optuna"></a>
+<a href="#architecture"><img src="https://img.shields.io/badge/FastAPI-2b2b2f?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+<a href="#architecture"><img src="https://img.shields.io/badge/React-three.js-2b2b2f?logo=react&logoColor=white" alt="React and three.js"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-2b2b2f" alt="License: AGPL-3.0"></a>
 </p>
 
@@ -377,7 +380,11 @@ source code under the same license. Third-party parts keep their own licenses (s
 
 ## Acknowledgements
 
-Robot model from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (Apache-2.0). Household
-objects from [Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/)
+[Meta](https://ai.meta.com) for Muse Spark, SAM 3.1 and Muse Image, used through the Meta Model API. Physics by
+[MuJoCo](https://mujoco.org). Robot model from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
+(Apache-2.0). Household objects from [Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/)
 (CC-BY 4.0) via [mujoco_scanned_objects](https://github.com/kevinzakka/mujoco_scanned_objects) (MIT). Inverse
 kinematics with [mink](https://github.com/kevinzakka/mink); Bayesian search with [Optuna](https://optuna.org).
+
+Kintsugi was built during the **Meta AI Developer Hackathon** (2026). Thanks to Meta for organising it and for the
+Meta Model API credits that powered every Muse Spark, SAM 3.1 and Muse Image call in this project.
