@@ -373,7 +373,7 @@ scripts/        command-line tools; smoke_test.py runs after every change
 
 ## License
 
-Copyright (C) 2026 0xE1G. Kintsugi is free software under the
+Copyright (C) 2026 Yahya Khalid. Kintsugi is free software under the
 [GNU Affero General Public License v3.0](LICENSE): you may use, study, change and share it. Anyone who distributes it,
 or a product built on it, or runs a changed version as a network service, must keep this notice and release their full
 source code under the same license. Third-party parts keep their own licenses (see Acknowledgements).
