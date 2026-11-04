@@ -85,7 +85,9 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 
 ### Skills transfer zero-shot
 
-<p align="center"><img src="docs/media/zero_shot.gif" alt="A skill found on a bowl is used zero-shot on an unseen mug and on scanned household objects" width="820"></p>
+<p align="center"><b>One skill, found on a bowl, used zero-shot on objects it never saw.</b></p>
+
+<p align="center"><img src="docs/media/zero_shot.gif" alt="A skill found on a bowl is used zero-shot on an unseen mug and on scanned household objects" width="560"></p>
 
 A skill is defined on shapes, not object names, so the rim grasp found on one bowl picks up an unseen mug and real 3D
 scans of household objects ([Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/))
@@ -94,7 +96,7 @@ mug, instead of 900 to build a skill from scratch.
 
 ### From a photo to a digital twin
 
-<p align="center"><img src="docs/media/photo_to_twin.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Image rebuilds the table; the digital twin with the task from Muse Spark" width="820"></p>
+<p align="center"><img src="docs/media/photo_to_twin.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Image rebuilds the table; the digital twin with the task from Muse Spark" width="100%"></p>
 
 Muse Spark lists the objects in the photo and proposes a task, SAM 3.1 finds each one, and Muse Image rebuilds the
 tabletop. Positions come from the photo's own geometry, so the twin keeps your layout (on 16 test photos: 70/70 objects
