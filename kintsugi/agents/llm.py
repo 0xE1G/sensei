@@ -37,7 +37,7 @@ BACKENDS = ("rule", "spark")
 # and was 2-3x faster for task specs (20/20 vs 19/20) and plan programs (48/56 = 48/56); diagnosis keeps the model's own
 # level (first look 11/14 vs 8/14 at low). Jobs not listed: the model decides until measured.
 SPARK_EFFORT = {"task_spec": "low", "plan_program": "low"}
-DEFAULT_MODEL = {"rule": "rule-v1", "spark": "muse-spark"}     # spark: META_MODEL / the model in the local settings wins (kintsugi.settings)
+DEFAULT_MODEL = {"rule": "rule-v1", "spark": "muse-spark-1.3"}   # a model ID the Meta Model API lists     # spark: META_MODEL / the model in the local settings wins (kintsugi.settings)
 
 
 class ModelRejected(Exception):

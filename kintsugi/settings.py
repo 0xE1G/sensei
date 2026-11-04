@@ -33,11 +33,15 @@ def _file() -> dict:
         return {}
 
 
+# Used when neither the environment nor the settings file sets a value, so a new user only has to paste a key.
+DEFAULTS = {"meta_api_base": "https://api.meta.ai/v1", "meta_model": "muse-spark-1.3"}
+
+
 def get(name: str, default=None):
     env, _, _ = FIELDS[name]
     if env and os.environ.get(env):
         return os.environ[env]
-    return _file().get(name) or default
+    return _file().get(name) or default or DEFAULTS.get(name)
 
 
 def source(name: str) -> str | None:

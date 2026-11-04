@@ -886,6 +886,13 @@ round started by the search (see status).
    Engine -> real recordings with live calls (sort, call details + Settings, door creation time-lapse labelled with real
    time, door replay, photo twin, Investigator, Experiments, Skills) -> Architecture -> SearchGates -> Reliable -> Close;
    2:58, no voice yet (out/kintsugi_demo_v2.mp4).
+   Final submission video (2026-11-04): https://youtu.be/abXK6yvgmlE (composition "Demo", voice = film/voiceover/
+   demo_lines.json via make_vo.py --voice lily --folder lily_demo, mixed by film/voiceover/mix_demo_vo.py onto DemoSilent;
+   captions film/voiceover/make_srt_demo.py; thumbnail composition Thumb2). README rebuilt from it (docs/media: hero /
+   studio / photo_twin / new_skill GIFs and slide stills, made by film/make_readme_media_v2.py; core-engine Mermaid
+   diagram; model-jobs table; step-by-step setup with the Settings screenshot). Setup fix: settings.DEFAULTS give
+   meta_api_base https://api.meta.ai/v1 and meta_model muse-spark-1.3 (the old default "muse-spark" is not a model ID
+   the Meta Model API lists), so a new user only pastes a key; pillow added to requirements (twin.py uses PIL).
 9b. Later (user, 2026-11-02): learn a task from a video (Spark video input + SAM 3.1 tracking -> spec + plan
    program, verified as a composite; measured on rendered expert clips first) and task from a photo (goal photo ->
    measurable goals; photo of a real table -> simulated copy). See docs/implementation_plan.md optional 1 / 1b.
