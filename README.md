@@ -64,6 +64,10 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 
 ## How it works
 
+<p align="center"><img src="docs/media/fail_to_pass.gif" alt="Four robots fail with the seed skills (missed grasp, collisions); the same scenes succeed with the skills Kintsugi built and verified" width="100%"></p>
+
+<p align="center"><sub>The same four scenes: first with the seed skills, then with the skills Kintsugi built and verified.</sub></p>
+
 <p align="center"><img src="docs/media/loop.png" alt="The loop: it fails, it investigates, it practises, it verifies, it keeps the skill" width="100%"></p>
 
 1. **It fails.** The simulator catches and labels every failed step: missed grasp, collision, drop, tipped over, wrong
@@ -89,6 +93,8 @@ Muse Spark, and proven by the gates. Every skill your robot discovers on your ma
 and contributed skills pass the same re-verification gate first.
 
 ## Built with Meta models
+
+<p align="center"><img src="docs/media/meta_pipeline.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Spark writes the task and plan; Muse Image and MuJoCo rebuild it as a digital twin where the robot does the task" width="100%"></p>
 
 Every model the software calls is a Meta model, reached through the **Meta Model API** (`https://api.meta.ai/v1`).
 The simulation, search and statistics are ordinary code on the CPU.
