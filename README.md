@@ -71,57 +71,7 @@ When a step fails, the same loop runs every time:
 
 ## The core engine
 
-```mermaid
-flowchart TB
-    classDef spark fill:#f6ead0,stroke:#b8892d,color:#1d1d1f
-    classDef search fill:#e2eefc,stroke:#2a78d6,color:#1d1d1f
-    classDef gate fill:#ddf3e7,stroke:#2f9e6a,color:#1d1d1f
-    classDef sim fill:#f2f2f4,stroke:#9a9aa2,color:#1d1d1f
-
-    subgraph S1["1 · Plan and run"]
-        direction TB
-        REQ(["Request or photo"]) --> TS["Muse Spark: task spec<br/>(SAM 3.1 + Muse Image<br/>for a photo)"]
-        TS --> SC["Scene builder<br/>MuJoCo templates"]
-        SC --> PL["Muse Spark: plan program<br/>sandboxed Python"]
-        PL --> EPI["Parallel episodes"]
-        EPI --> PER["Perception<br/>point cloud → geometry"]
-        PER --> RT["Router<br/>best measured skill"]
-        RT --> MOT["Skills + motion<br/>mink IK"]
-        MOT --> MON["Monitor<br/>goals + failure labels"]
-    end
-
-    subgraph S2["2 · When a step fails"]
-        direction TB
-        FS["Failure search<br/>random · Optuna · Muse Spark"] --> ORC["Expert check<br/>is it solvable?"]
-        ORC --> INV["Muse Spark: diagnosis<br/>one-change replays"]
-        INV --> K{"Fix type"}
-        K -- parameter --> PA["Patch search<br/>Optuna TPE"]
-        K -- grasp --> EX["Explorer<br/>fit + reach on the point cloud<br/>randomized physics · Optuna TPE"]
-        K -- missing skill --> CR["Muse Spark: new skill code<br/>3 strategies · search · Optuna"]
-    end
-
-    subgraph S3["3 · Verify and keep"]
-        direction TB
-        G{"Gates<br/>fixes it · holds on unseen<br/>scenes · no regression"} -- passed --> LIB[("Skill library<br/>cards · evidence · lineage")]
-        LIB --> TR["Muse Spark: retrieve<br/>reuse on new objects"]
-    end
-
-    MON -- "step fails" --> ORC
-    PA --> G
-    EX --> G
-    CR --> G
-    G -- rejected --> K
-    LIB --> RT
-    LIB --> FS
-
-    class TS,PL,INV,CR,TR spark
-    class FS,PA,EX search
-    class G,LIB gate
-    class SC,EPI,PER,RT,MOT,MON,ORC sim
-```
-
-<sub>Gold: a Muse Spark job (Meta Model API). Blue: search (Optuna's TPE sampler is Bayesian search). Green: the
-statistical gates and the verified library. Grey: deterministic code and physics.</sub>
+<p align="center"><img src="docs/media/engine_diagram.png" alt="The core engine: plan and run; when a step fails: failure search, expert check, Muse Spark diagnosis, then a patch search, the explorer or Muse Spark writing new skill code; gates, skill library, retrieval" width="1000"></p>
 
 **Model jobs.** Every call to Muse Spark is a registered job with a versioned prompt, a JSON schema and a semantic
 validator. An invalid answer gets the validator's errors fed back once, then it is rejected with the reasons. Every
