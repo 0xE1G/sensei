@@ -1,5 +1,14 @@
 <p align="center"><img src="docs/media/banner.png" alt="Kintsugi" width="100%"></p>
 
+<p align="center">
+<a href="#built-with-meta-models"><img src="https://img.shields.io/badge/Built_on-Muse_Spark-0064E0?logo=meta&logoColor=white" alt="Built on Muse Spark"></a>
+<a href="#built-with-meta-models"><img src="https://img.shields.io/badge/Built_on-SAM_3.1-0064E0?logo=meta&logoColor=white" alt="Built on SAM 3.1"></a>
+<a href="#built-with-meta-models"><img src="https://img.shields.io/badge/Built_on-Muse_Image-0064E0?logo=meta&logoColor=white" alt="Built on Muse Image"></a>
+<a href="#setup"><img src="https://img.shields.io/badge/tested_on-Windows_11-2b2b2f" alt="Tested on Windows 11"></a>
+<a href="#setup"><img src="https://img.shields.io/badge/Python-3.11-2b2b2f?logo=python&logoColor=white" alt="Python 3.11"></a>
+<a href="#setup"><img src="https://img.shields.io/badge/GPU-not_needed-2b2b2f" alt="No GPU needed"></a>
+</p>
+
 <p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
 
 <p align="center"><sub>Every skill here was built and verified by Kintsugi.</sub></p>
@@ -178,7 +187,8 @@ All numbers are measured in simulation on fixed seeds, with held-out objects nev
 
 ## Setup
 
-About 10 minutes. Works on Windows, macOS and Linux, on an ordinary laptop: no GPU.
+About 10 minutes, on an ordinary laptop with no GPU. Developed and tested on **Windows 11** (Python 3.11);
+macOS and Linux use the same packages and should work too, but are not tested yet.
 
 **Install first** (once): [Python 3.11](https://www.python.org/downloads/release/python-3119/) (on Windows, tick
 *Add python.exe to PATH* in the installer), [Node.js](https://nodejs.org/) (the LTS version) and
