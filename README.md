@@ -6,18 +6,13 @@
 Every skill here was built and verified by Kintsugi.</sub></p>
 
 <p align="center">
-<a href="https://youtu.be/abXK6yvgmlE"><img src="docs/media/video.jpg" alt="Watch the 3-minute demo" width="300"></a><br>
-<a href="https://youtu.be/abXK6yvgmlE"><b>▶ Watch the 3-minute demo</b></a>
-</p>
-
-<p align="center">
 Describe a task, or show a photo of your table. <b>Muse Spark</b> plans it and the robot runs it in physics simulation.<br>
 When a step fails, the robot finds out why, practises on that failure, and keeps a fix only when it is <b>proven</b><br>
 on scenes it has never seen. No training, no GPU, about a cent per new skill, on a laptop.
 </p>
 
 <p align="center">
-<a href="#see-it-work">See it work</a> · <a href="#how-it-works">How it works</a> · <a href="#built-with-meta-models">Meta models</a> · <a href="#the-core-engine">Core engine</a> ·
+<a href="https://youtu.be/abXK6yvgmlE">▶ Demo video</a> · <a href="#see-it-work">See it work</a> · <a href="#how-it-works">How it works</a> · <a href="#built-with-meta-models">Meta models</a> · <a href="#the-core-engine">Core engine</a> ·
 <a href="#results">Results</a> · <a href="#setup">Setup</a> · <a href="#architecture">Architecture</a>
 </p>
 
