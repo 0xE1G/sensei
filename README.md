@@ -43,10 +43,13 @@ Spark call appears live in the panel at the top right, with its model, duration,
 
 ### Start from a photo of your table
 
-<p align="center"><img src="docs/media/photo_twin.gif" alt="A photo of a real table becomes a digital twin; the robot does the task" width="900"></p>
+<p align="center"><img src="docs/media/photo_to_twin.gif" alt="From one photo to a digital twin: Muse Spark reads the scene and writes the task, SAM 3.1 finds each object, Muse Image clears the table into a seamless texture, the twin is built in MuJoCo and the robot runs the task" width="100%"></p>
 
-Muse Spark reads the scene and proposes a task, SAM 3.1 finds each object, and Muse Image rebuilds the tabletop. The
-robot then works in a digital twin of your own workspace.
+Attach a photo in the Studio, with or without a request. Muse Spark lists the objects with their real sizes and
+proposes a task, SAM 3.1 tightens each object's box, and Muse Image removes the objects so the bare table becomes a
+seamless texture. Positions come from the photo's own geometry, so the twin keeps your layout (on 16 test photos:
+70/70 objects found, 282/282 left/right and front/behind relations kept). The robot then works on a copy of your own
+table.
 
 ### No skill for it? Muse Spark writes one
 
@@ -57,10 +60,6 @@ skills as code, search tries and tunes them in physics, and the best one passes 
 every scene succeeds (15 minutes of real time, shown as a time-lapse).
 
 ## How it works
-
-<p align="center"><img src="docs/media/fail_to_pass.gif" alt="Four robots fail with the seed skills (missed grasp, collisions); the same scenes succeed with the skills Kintsugi built and verified" width="100%"></p>
-
-<p align="center"><sub>The same four scenes: first with the seed skills, then with the skills Kintsugi built and verified.</sub></p>
 
 <p align="center"><img src="docs/media/loop.png" alt="The loop: it fails, it investigates, it practises, it verifies, it keeps the skill" width="100%"></p>
 
@@ -77,6 +76,13 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 5. **It keeps the skill.** The skill becomes a versioned card with its parameters, preconditions, evidence and full
    lineage. The router then picks, for each object shape, the skill with the best measured success.
 
+### Before and after
+
+<p align="center"><img src="docs/media/fail_to_pass.gif" alt="Four scenes fail with the seed skills (missed grasp, collisions); a wipe reveals the same scenes succeeding with the skills Kintsugi built and verified" width="900"></p>
+
+The same four scenes, first with the four hand-written seed skills, then with the skills the loop built: two grasps
+found by search, a push written by Muse Spark, and a parameter patch that keeps the hand clear of a bottle.
+
 ### Skills transfer zero-shot
 
 <p align="center"><b>One skill, found on a bowl, used zero-shot on objects it never saw.</b></p>
@@ -87,14 +93,6 @@ A skill is defined on shapes, not object names, so the rim grasp found on one bo
 scans of household objects ([Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/))
 with no new practice. A new object type gets a short verification run before the skill is trusted: 10 trials for the
 mug, instead of 900 to build a skill from scratch.
-
-### From a photo to a digital twin
-
-<p align="center"><img src="docs/media/photo_to_twin.gif" alt="A photo of a real table; SAM 3.1 finds each object; Muse Image rebuilds the table; the digital twin with the task from Muse Spark" width="100%"></p>
-
-Muse Spark lists the objects in the photo and proposes a task, SAM 3.1 finds each one, and Muse Image rebuilds the
-tabletop. Positions come from the photo's own geometry, so the twin keeps your layout (on 16 test photos: 70/70 objects
-found, 282/282 left/right and front/behind relations kept).
 
 ### Discover your own skills
 
