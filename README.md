@@ -1,44 +1,51 @@
-<div align="center">
+<p align="center"><img src="docs/media/banner.png" alt="Kintsugi: a robot that builds its own skills, and proves they work" width="100%"></p>
 
-<img src="docs/media/logo.svg" alt="Kintsugi logo" width="88">
+<p align="center">
+Describe a task, or show a photo of your table. <b>Muse Spark</b> plans it and the robot runs it in physics simulation.<br>
+When a step fails, the robot finds out why, practises on that failure, and keeps a fix only when it is <b>proven</b><br>
+on scenes it has never seen. No training, no GPU, about a cent per new skill, on a laptop.
+</p>
 
-# Kintsugi
+<p align="center">
+<a href="https://youtu.be/abXK6yvgmlE"><img src="docs/media/video.jpg" alt="Watch the 3-minute demo" width="380"></a><br>
+<a href="https://youtu.be/abXK6yvgmlE"><b>▶ Watch the 3-minute demo</b></a>
+</p>
 
-**A robot that builds its own skills, and proves they work.**
+<p align="center"><img src="docs/media/robots.gif" alt="Six robots at work: sorting, pushing a plate, standing a bottle up, opening a drawer, picking a rotated bar, and working on a digital twin of a real table" width="900"></p>
+<p align="center"><sub>Sorting · pushing a plate · standing a bottle up · opening a drawer · a rotated bar · a twin of a real table.
+Every skill here was built and verified by Kintsugi.</sub></p>
 
-[![Watch the demo on YouTube](docs/media/video.jpg)](https://youtu.be/abXK6yvgmlE)
+<p align="center">
+<a href="#see-it-work">See it work</a> · <a href="#how-it-works">How it works</a> · <a href="#the-core-engine">Core engine</a> ·
+<a href="#results">Results</a> · <a href="#built-with-meta-models">Meta models</a> · <a href="#architecture">Architecture</a> ·
+<a href="#setup">Setup</a>
+</p>
 
-[▶ Watch the 3-minute demo](https://youtu.be/abXK6yvgmlE) · Built on Meta's Muse Spark, SAM 3.1 and Muse Image ·
-No training · No GPU · Runs on a laptop
+## Why Kintsugi
 
-</div>
+Robots today learn a new skill from thousands of demonstrations and days of GPU training, and when that skill meets an
+object it was not trained on, it fails without saying why. The fix is more data.
 
----
+Kintsugi takes a different route:
 
-<p align="center"><img src="docs/media/hero.gif" alt="The same bowl: the seed skill fails, the skill Kintsugi built succeeds" width="900"></p>
-
-Kintsugi is a robotics studio in which a robot arm builds and verifies its own skills. You describe a task in plain
-words, or show it a photo of your table. Muse Spark plans it and the robot runs it in physics simulation. When a step
-fails, Muse Spark **investigates why**, the robot **practises on that failure**, and a new skill is **kept only if it
-works on scenes it has never seen and breaks nothing that worked before**. Every verified skill joins a library that
-the robot reuses on new objects, and when a skill is missing, Muse Spark writes it.
-
-<p align="center"><img src="docs/media/why.jpg" alt="Robot learning today needs data, GPUs and weeks; Kintsugi acquires a skill for about a cent in minutes" width="900"></p>
-
-## Contents
-
-[See it work](#see-it-work) · [How it works](#how-it-works) · [The core engine](#the-core-engine) ·
-[Results](#results) · [Built with Meta models](#built-with-meta-models) · [Architecture](#architecture) ·
-[Setup](#setup) · [Command-line tools](#command-line-tools)
+- **Meta's models reason.** Muse Spark turns a request into a task and a plan, diagnoses every failure from what the
+  cameras and the gripper measured, and writes the code of skills the robot does not have yet. SAM 3.1 and Muse Image
+  rebuild a real table, from one photo, as a digital twin.
+- **Physics practises.** Every idea is tried in MuJoCo, hundreds of times in parallel on the CPU, under randomized
+  friction and mass, and tuned by Bayesian search.
+- **Statistics decide.** A change is kept only if it fixes the failure, holds on scenes and objects the search never
+  saw, and breaks nothing that worked before.
+- **Skills are geometry, not names.** A skill is defined on the shapes the cameras measure (a rim, a top face, a long
+  axis), so a skill found on a bowl picks up a mug it has never seen.
 
 ## See it work
 
-### Describe a task: Muse Spark plans it, many scenes run at once
+### Describe a task
 
-<p align="center"><img src="docs/media/studio.gif" alt="A typed task becomes a plan; many scenes run in parallel and all succeed" width="900"></p>
+<p align="center"><img src="docs/media/studio.gif" alt="The Studio: a typed task becomes a plan, many scenes run in parallel and all succeed, with every Meta model call listed live" width="900"></p>
 
-Every Muse Spark call appears live in the panel at the top right, with its model, duration, tokens, endpoint and the
-request ID returned by the Meta Model API.
+Muse Spark writes the task and the plan; many scenes run at once on the CPU and stream into the 3D view. Every Muse
+Spark call appears live in the panel at the top right, with its model, duration, tokens, endpoint and request ID.
 
 ### Start from a photo of your table
 
@@ -47,9 +54,9 @@ request ID returned by the Meta Model API.
 Muse Spark reads the scene and proposes a task, SAM 3.1 finds each object, and Muse Image rebuilds the tabletop. The
 robot then works in a digital twin of your own workspace.
 
-### No skill for it? Muse Spark writes one, and the gates prove it
+### No skill for it? Muse Spark writes one
 
-<p align="center"><img src="docs/media/new_skill.gif" alt="A missing skill: the first run fails, Muse Spark writes candidate skills, search and gates verify one, every scene then succeeds" width="900"></p>
+<p align="center"><img src="docs/media/new_skill.gif" alt="A missing skill: the first run fails, Muse Spark writes candidate skills, search and gates verify one, then every scene succeeds" width="900"></p>
 
 Asked to open a cabinet door it has no skill for, the robot fails every scene. Muse Spark writes three candidate
 skills as code, search tries and tunes them in physics, and the best one passes the gates. Running the task again,
@@ -57,21 +64,33 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 
 ## How it works
 
-<p align="center"><img src="docs/media/meta_models.jpg" alt="Muse Spark reasons and writes code, SAM 3.1 sees real objects, Muse Spark and Muse Image rebuild the real world" width="900"></p>
+<p align="center"><img src="docs/media/loop.png" alt="The loop: it fails, it investigates, it practises, it verifies, it keeps the skill" width="100%"></p>
 
-<p align="center"><img src="docs/media/engine.jpg" alt="The loop: task, plan, run, investigate, practise, verify, library" width="900"></p>
+1. **It fails.** The simulator catches and labels every failed step: missed grasp, collision, drop, tipped over, wrong
+   place. An expert with privileged state first checks that the step was solvable at all.
+2. **It investigates.** Muse Spark reads the evidence (perception, the skill's parameters, finger width, contacts) and
+   proposes up to three causes. Each is tested by replaying the exact scene with one change. If every idea is
+   rejected, Spark gets a second look with frames from the replay.
+3. **It practises.** Depending on the cause: a parameter patch, a new grasp (candidates on the point cloud, filtered by
+   gripper fit and reach, tried in parallel under randomized physics), or new skill code written by Muse Spark. Bayesian
+   search (Optuna's TPE sampler) tunes the best candidates.
+4. **It verifies.** Three pre-declared gates, on scenes the search never used: it fixes the failure (paired McNemar
+   test), it holds on held-out objects, and it breaks no earlier task.
+5. **It keeps the skill.** The skill becomes a versioned card with its parameters, preconditions, evidence and full
+   lineage. The router then picks, for each object shape, the skill with the best measured success.
 
-When a step fails, the same loop runs every time:
+### Discover your own skills
 
-| 1 · It fails | 2 · It investigates |
-|---|---|
-| <img src="docs/media/step1_fails.jpg" alt="Every failed step is caught and labelled"> | <img src="docs/media/step2_investigates.jpg" alt="Muse Spark proposes causes; each is tested by a one-change replay"> |
-| **3 · It practises on the failure** | **4 · It keeps only what is proven** |
-| <img src="docs/media/step3_practises.jpg" alt="Hundreds of candidates tried under randomized physics, tuned by Bayesian search"> | <img src="docs/media/step4_verified.jpg" alt="Three gates, and the verified skill library it built"> |
+<p align="center"><img src="docs/media/skills.png" alt="The skill library: seed skills, skills found by practice, skills written by Muse Spark, and skills discovered on your machine" width="100%"></p>
+
+Kintsugi starts from four hand-written seed skills; everything else in the library was found by practice or written by
+Muse Spark, and proven by the gates. Every skill your robot discovers on your machine goes to your own library
+(`user_library/`, never committed). Share skills with `python scripts/skills.py export | import | contribute`: imported
+and contributed skills pass the same re-verification gate first.
 
 ## The core engine
 
-<p align="center"><img src="docs/media/engine_diagram.png" alt="The core engine: plan and run; when a step fails: failure search, expert check, Muse Spark diagnosis, then a patch search, the explorer or Muse Spark writing new skill code; gates, skill library, retrieval" width="1000"></p>
+<p align="center"><img src="docs/media/engine_diagram.png" alt="The core engine: plan and run; when a step fails: failure search, expert check, Muse Spark diagnosis, then a patch search, the explorer or Muse Spark writing new skill code; gates, skill library, retrieval" width="100%"></p>
 
 **Model jobs.** Every call to Muse Spark is a registered job with a versioned prompt, a JSON schema and a semantic
 validator. An invalid answer gets the validator's errors fed back once, then it is rejected with the reasons. Every
@@ -99,9 +118,7 @@ failures.
 All numbers are measured in simulation on fixed seeds, with held-out objects never used for tuning
 (`python scripts/headlines.py` reproduces them).
 
-<p align="center"><img src="docs/media/reliable.jpg" alt="475 of 480 scenes succeed across 10 tasks; failures found by adversarial search fall from 90.6 to 7.3 per 100 scenes" width="900"></p>
-
-<p align="center"><img src="docs/media/generalization.jpg" alt="Skills transfer zero-shot to new objects; Muse Spark writes skills that did not exist" width="900"></p>
+<p align="center"><img src="docs/media/results.png" alt="475 of 480 scenes succeed; failures found by adversarial search fall from 90.6 to 7.3 per 100 scenes; every repair holds on unseen objects; reuse takes 10 trials instead of 900" width="100%"></p>
 
 | | |
 |---|---|
@@ -137,20 +154,7 @@ A rule-based offline mode runs the standard tasks with no model at all.
 
 ## Architecture
 
-<p align="center"><img src="docs/media/architecture.jpg" alt="Every run: cameras, perception, plan, skills, motion, physics. When a step fails: monitor, investigator, explorer, gates" width="900"></p>
-
-```mermaid
-flowchart LR
-    UI["Web app<br/>React + Three.js"] -- "HTTP /api" --> S["FastAPI server"]
-    S -- "starts" --> J["Studio job<br/>(own process)"]
-    J --> W["Simulation workers<br/>MuJoCo, in parallel on the CPU"]
-    S --> M["Model client<br/>schemas · validators · cache · call log"]
-    J --> M
-    M -- "HTTPS" --> META[("Meta Model API<br/>Muse Spark · SAM 3.1 · Muse Image")]
-    J --> LIB[("Skill library<br/>base + user")]
-    W -- "pose logs, records" --> RUNS[("runs/")]
-    RUNS --> S
-```
+<p align="center"><img src="docs/media/architecture.png" alt="Web app, server, Studio job, simulation workers, Meta Model API, gates, skill library, and what stays on your machine" width="100%"></p>
 
 - **Web app** (`web/`, React + Vite + react-three-fiber): the Studio, Episodes, Progress, Investigator, Experiments and
   Skills pages. Physics never runs in the browser; it replays recorded poses and live frames.
