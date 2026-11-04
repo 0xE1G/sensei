@@ -73,60 +73,55 @@ When a step fails, the same loop runs every time:
 
 ```mermaid
 flowchart TB
-    subgraph IN["Input"]
-        REQ["Typed request"]
-        PHOTO["Photo of a real table"]
+    classDef spark fill:#f6ead0,stroke:#b8892d,color:#1d1d1f
+    classDef search fill:#e2eefc,stroke:#2a78d6,color:#1d1d1f
+    classDef gate fill:#ddf3e7,stroke:#2f9e6a,color:#1d1d1f
+    classDef sim fill:#f2f2f4,stroke:#9a9aa2,color:#1d1d1f
+
+    subgraph S1["1 · Plan and run"]
+        direction TB
+        REQ(["Request or photo"]) --> TS["Muse Spark: task spec<br/>(SAM 3.1 + Muse Image<br/>for a photo)"]
+        TS --> SC["Scene builder<br/>MuJoCo templates"]
+        SC --> PL["Muse Spark: plan program<br/>sandboxed Python"]
+        PL --> EPI["Parallel episodes"]
+        EPI --> PER["Perception<br/>point cloud → geometry"]
+        PER --> RT["Router<br/>best measured skill"]
+        RT --> MOT["Skills + motion<br/>mink IK"]
+        MOT --> MON["Monitor<br/>goals + failure labels"]
     end
 
-    subgraph META["Meta Model API"]
-        SPARK["Muse Spark"]
-        SAM["SAM 3.1"]
-        MIMG["Muse Image"]
+    subgraph S2["2 · When a step fails"]
+        direction TB
+        FS["Failure search<br/>random · Optuna · Muse Spark"] --> ORC["Expert check<br/>is it solvable?"]
+        ORC --> INV["Muse Spark: diagnosis<br/>one-change replays"]
+        INV --> K{"Fix type"}
+        K -- parameter --> PA["Patch search<br/>Optuna TPE"]
+        K -- grasp --> EX["Explorer<br/>fit + reach on the point cloud<br/>randomized physics · Optuna TPE"]
+        K -- missing skill --> CR["Muse Spark: new skill code<br/>3 strategies · search · Optuna"]
     end
 
-    REQ --> TS["task_spec job<br/>objects · goals · constraints<br/>JSON schema + validator"]
-    PHOTO --> SP["scene_photo job · SAM 3.1 boxes ·<br/>Muse Image tabletop → digital twin"]
-    TS --> SCENE["Scene builder<br/>MjSpec templates · deterministic placer"]
-    SP --> SCENE
-    SCENE --> PLAN["plan_program job<br/>Python over the skill API<br/>AST-whitelisted sandbox"]
-    PLAN --> RUN["Parallel episodes<br/>MuJoCo · Franka Panda"]
-
-    subgraph EP["Every episode"]
-        PERC["Perception<br/>RGB-D → point cloud → geometry<br/>rims · faces · sizes · axes"]
-        ROUTE["Router<br/>skill with the best measured<br/>success for this shape"]
-        SKILL["Skill cards + patches"]
-        MOT["Motion · mink IK"]
-        MON["Monitor<br/>goal checks · failure labels"]
-        PERC --> ROUTE --> SKILL --> MOT --> MON
+    subgraph S3["3 · Verify and keep"]
+        direction TB
+        G{"Gates<br/>fixes it · holds on unseen<br/>scenes · no regression"} -- passed --> LIB[("Skill library<br/>cards · evidence · lineage")]
+        LIB --> TR["Muse Spark: retrieve<br/>reuse on new objects"]
     end
-    RUN --> PERC
 
-    MON -- "a step fails" --> ORC["Expert check<br/>solvable with privileged state?"]
-    FS["Adversarial failure search<br/>random · Optuna TPE · search_proposal job"] --> ORC
-    ORC --> INV["Investigator · diagnose job<br/>causes → one-change replays →<br/>confirmed / rejected<br/>camera evidence for a second look"]
-    INV --> KIND{"What kind of fix?"}
-    KIND -- "a parameter" --> PATCH["Patch search<br/>investigator hints + Optuna TPE"]
-    KIND -- "a new grasp" --> EXP["Explorer<br/>candidates on the point cloud →<br/>gripper fit + IK reach →<br/>parallel trials, randomized physics →<br/>Optuna TPE tuning"]
-    KIND -- "a missing skill" --> CRE["Skill creator · propose_primitive job<br/>3 strategies as motion code →<br/>search → Optuna → one revision"]
-    PATCH --> GATE{"Gates<br/>fixes the failure · McNemar test<br/>holds on held-out scenes<br/>no regression on earlier tasks"}
-    EXP --> GATE
-    CRE --> GATE
-    GATE -- "rejected" --> KIND
-    GATE -- "passed" --> LIB[("Skill library<br/>versioned cards · evidence · lineage")]
-    LIB --> ROUTE
-    LIB --> TR["Transfer · retrieve job<br/>match by shape → short verification"]
+    MON -- "step fails" --> ORC
+    PA --> G
+    EX --> G
+    CR --> G
+    G -- rejected --> K
+    LIB --> RT
     LIB --> FS
 
-    SPARK -.-> TS
-    SPARK -.-> SP
-    SAM -.-> SP
-    MIMG -.-> SP
-    SPARK -.-> PLAN
-    SPARK -.-> INV
-    SPARK -.-> CRE
-    SPARK -.-> FS
-    SPARK -.-> TR
+    class TS,PL,INV,CR,TR spark
+    class FS,PA,EX search
+    class G,LIB gate
+    class SC,EPI,PER,RT,MOT,MON,ORC sim
 ```
+
+<sub>Gold: a Muse Spark job (Meta Model API). Blue: search (Optuna's TPE sampler is Bayesian search). Green: the
+statistical gates and the verified library. Grey: deterministic code and physics.</sub>
 
 **Model jobs.** Every call to Muse Spark is a registered job with a versioned prompt, a JSON schema and a semantic
 validator. An invalid answer gets the validator's errors fed back once, then it is rejected with the reasons. Every
