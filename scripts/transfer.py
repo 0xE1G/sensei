@@ -1,6 +1,6 @@
 """Transfer experiment: library retrieval + verification on an unseen object type vs a from-scratch repair.
 
-    python scripts/transfer.py mug --backend claude_cli
+    python scripts/transfer.py mug --backend spark
     python scripts/transfer.py cup --no-scratch
 
 Writes runs/<time>_transfer_<template>/report.json (retrieval choice and explanation, verification trials,

@@ -864,6 +864,15 @@ round started by the search (see status).
    film/, docs/figures/, docs/results.md, scripts/make_figures.py, web/public/_preview/ are git-ignored and kept
    locally (never delete them). README rewritten (intro, video, GIFs in docs/media/ made by
    film/make_readme_media.py, results, setup).
+8t. **Meta-only runtime + dark theme (2026-11-04, hackathon rule)**: every model the software calls must be a Meta
+   model (organizers' ruling; TTS for the video voice-over is the only exception and is not part of the software). The
+   claude_cli backend and the Spark -> Claude fallback are REMOVED from the code (llm.BACKENDS = rule, spark; settings
+   default_backend rule/spark, no spark_fallback; server backends, settings test and headline filters use spark;
+   Settings dialog and Studio list only Muse Spark and Offline rules; eval_models / headlines arms without Claude).
+   Skills, patches and records that Claude wrote earlier stay (their lineage still says claude_cli: history, not a
+   call). The diagnosis headline 87.5% is Spark's own (runs/20261102-200139_investigate, seed library). Old Claude
+   comparison numbers above are development history, not product claims. Dark is the only theme (the
+   prefers-color-scheme blocks in styles.css unwrapped; index.html declares color-scheme dark). Smoke 32/32.
 9b. Later (user, 2026-11-02): learn a task from a video (Spark video input + SAM 3.1 tracking -> spec + plan
    program, verified as a composite; measured on rendered expert clips first) and task from a photo (goal photo ->
    measurable goals; photo of a real table -> simulated copy). See docs/implementation_plan.md optional 1 / 1b.

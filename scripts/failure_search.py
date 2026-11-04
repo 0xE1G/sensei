@@ -2,7 +2,7 @@
 
     python scripts/failure_search.py --from-seed                    # the hand-written starting library
     python scripts/failure_search.py                                # the current library (after repairs)
-    python scripts/failure_search.py --budget 64 --strategies random model --backend claude_cli
+    python scripts/failure_search.py --budget 64 --strategies random model --backend spark
 
 Writes runs/<time>_failsearch/report.json: per-strategy metrics, every trial, a capability map, and failure clusters.
 """

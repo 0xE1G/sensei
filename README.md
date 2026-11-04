@@ -106,8 +106,8 @@ then works in a digital twin of your workspace.
 | **SAM 3.1** | finds each object in a real photo |
 | **Muse Image** | recreates the empty tabletop from a photo |
 
-Every model output is schema-validated, cached and logged. A rule-based offline mode runs the standard tasks with no
-model at all, and Claude can serve as a fallback.
+Every model the software calls is a Meta model. Every model output is schema-validated, cached and logged. A
+rule-based offline mode runs the standard tasks with no model at all.
 
 ## Quick start
 
@@ -162,7 +162,7 @@ kintsugi/
   sim/          scene building (MjSpec templates, scanned and imported objects), recorder, monitor (goal checks, labels)
   perception/   cameras, depth -> object descriptors, SAM 3.1 client
   skills/       skill cards, router, base and user libraries
-  agents/       one model client (Muse Spark / Claude / offline rules), versioned prompts, schemas, validators
+  agents/       one model client (Muse Spark / offline rules), versioned prompts, schemas, validators
   search/       repair loop (explorer), failure search
   executor.py   episodes: perceive -> plan -> skills -> checks -> labels
   program.py    sandboxed plan programs over the skill API

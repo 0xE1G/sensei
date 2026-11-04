@@ -181,11 +181,11 @@ def p_scanned(r):
 
 
 def m_models_task_spec(rep):
-    return _run(["scripts/eval_models.py", "task_spec", "--arms", "rule", "claude", "spark", "spark_low"])[0]
+    return _run(["scripts/eval_models.py", "task_spec", "--arms", "rule", "spark", "spark_low"])[0]
 
 
 def m_models_programs(rep):
-    return _run(["scripts/eval_models.py", "programs", "--arms", "rule", "claude", "spark", "spark_low"])[0]
+    return _run(["scripts/eval_models.py", "programs", "--arms", "rule", "spark", "spark_low"])[0]
 
 
 def p_models(r):

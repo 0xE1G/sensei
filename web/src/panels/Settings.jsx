@@ -148,7 +148,6 @@ function TestResult({ r }) {
 
 const BACKENDS = [
   ["spark", "Muse Spark", "Meta's model: plans tasks, diagnoses failures, writes new skills"],
-  ["claude_cli", "Claude", "Through the claude CLI on this computer"],
   ["rule", "Offline rules", "No model: built-in rules for the standard tasks"],
 ];
 
@@ -158,10 +157,10 @@ function ModelsPane({ s, edit, setEdit, save, forget, setDefault, tests, test })
   return (
     <>
       <div className="sx-section-head"><h4>Default model</h4><p>Used by the Studio. Scripts and experiments keep the model they are given.</p></div>
-      <div className="sx-choices" role="radiogroup" aria-label="Default model">
+      <div className="sx-choices two" role="radiogroup" aria-label="Default model">
         {BACKENDS.map(([k, name, desc]) => {
           const on = (s.default_backend || "") === k;
-          const unavailable = (k === "spark" && !metaReady) || (k === "claude_cli" && !s.claude_cli_found);
+          const unavailable = k === "spark" && !metaReady;
           return (
             <button key={k} type="button" role="radio" aria-checked={on} className={`sx-choice ${on ? "on" : ""}`}
                     onClick={() => setDefault("default_backend", k)}>
@@ -186,11 +185,6 @@ function ModelsPane({ s, edit, setEdit, save, forget, setDefault, tests, test })
           <TextField label="API address" field="meta_api_base" s={s} edit={edit} setEdit={setEdit} placeholder="https://api.meta.ai/v1" />
           <TextField label="Model" field="meta_model" s={s} edit={edit} setEdit={setEdit} placeholder="muse-spark-1.3" />
         </details>
-        <label className="sx-switch" title="The answer is marked as Claude's and never counted as Spark's">
-          <input type="checkbox" checked={s.spark_fallback !== "0"} onChange={(e) => setDefault("spark_fallback", e.target.checked ? "1" : "0")} />
-          <span className="sx-track"><span /></span>
-          If a Muse Spark call fails, ask Claude instead (marked as a fallback)
-        </label>
         <div className="sx-actions">
           <button className="btn primary" disabled={!dirty} onClick={() => save(["meta_api_base", "meta_model", "meta_api_key"])}>Save</button>
           <button className="btn" disabled={!metaReady || dirty} onClick={() => test("spark")}>Test connection</button>
@@ -200,16 +194,6 @@ function ModelsPane({ s, edit, setEdit, save, forget, setDefault, tests, test })
         <TestResult r={tests.spark} />
       </div>
 
-      <div className="sx-card">
-        <div className="sx-card-head">
-          <span className="sx-mono">C</span>
-          <div><h5>Claude</h5><p>Optional fallback and development model, through the claude CLI</p></div>
-          {s.claude_cli_found ? <Status tone="ok">CLI found</Status> : <Status tone="off">CLI not found</Status>}
-        </div>
-        {!s.claude_cli_found && <p className="sx-hint">Install Claude Code and run <code>claude</code> once to log in; this updates the next time Settings opens.</p>}
-        <div className="sx-actions"><button className="btn" disabled={!s.claude_cli_found} onClick={() => test("claude_cli")}>Test</button></div>
-        <TestResult r={tests.claude_cli} />
-      </div>
     </>
   );
 }

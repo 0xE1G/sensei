@@ -3,7 +3,7 @@
     python scripts/prompt_task.py "Put the bowl on the tray."                      # rule stand-in
     python scripts/prompt_task.py "Stack the blocks, largest at the bottom." --program --verify -n 4
                                         # model writes a program, verified on fresh scenes -> composite card
-    python scripts/prompt_task.py "Sort the blocks and the bowl onto the trays of the same colour, don't knock over the bottle" --backend claude_cli -n 8
+    python scripts/prompt_task.py "Sort the blocks and the bowl onto the trays of the same colour, don't knock over the bottle" --backend spark -n 8
     KINTSUGI_LLM=spark python scripts/prompt_task.py "..."                         # Muse Spark, once the key is set
 
 Prints the status (ok / clarify / refuse), the spec and the call metadata (backend, model, cached, repairs).

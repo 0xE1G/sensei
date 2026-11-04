@@ -230,7 +230,7 @@ def headlines():
     out = {}
     try:
         inv = [(d, _read(d / "report.json")) for d in latest.get("investigation", [])]
-        inv = [(d, r) for d, r in inv if r.get("backend") == "claude_cli"]
+        inv = [(d, r) for d, r in inv if r.get("backend") == "spark"]
 
         def pv(r):
             vs = [int(c["model_meta"]["prompt_version"]) for c in r.get("cases", []) if c.get("model_meta")]
@@ -279,7 +279,7 @@ def headlines():
                                      for d, r in fs if r.get("strategies") and len(r["strategies"]) == 3]
         cs = [_read(d / "report.json") for d in latest.get("create_skill", [])]
         prom = [r for r in cs if r.get("outcome") == "promoted" and r.get("phases", {}).get("proposals", [{}])[0]
-                .get("meta", {}).get("backend") == "claude_cli"
+                .get("meta", {}).get("backend") == "spark"
                 and r["promoted"]["card"] in _active_cards()]                 # only skills still in the library
         if prom:
             r = prom[-1]
@@ -427,8 +427,6 @@ _job = {"id": None, "proc": None}
 def _backends():
     from kintsugi import settings
     out = ["rule"]
-    if shutil.which("claude"):
-        out.append("claude_cli")
     if settings.spark_ready():
         out.append("spark")
     return out
@@ -644,7 +642,7 @@ def get_settings():
     from kintsugi.perception.sam import availability, boxes_available
     ok, why = availability()
     pok, pwhy = boxes_available()                    # photos: SAM 3.1 boxes + Muse Image (Meta key, or SAM's own)
-    return {**settings.public(), "claude_cli_found": bool(shutil.which("claude")),
+    return {**settings.public(),
             "sam": {"available": ok, "reason": why}, "photo": {"available": pok, "reason": pwhy},
             "config_file": "config/local.json"}
 
@@ -670,11 +668,8 @@ def test_backend(body: dict = Body(...)):
         if backend == "spark":
             out = llm._call_openai_compatible("Reply with the single word OK.", "Say OK.",
                                               settings.get("meta_model") or llm.DEFAULT_MODEL["spark"], timeout=30)
-        elif backend == "claude_cli":
-            out = llm._call_claude_cli("Reply with the single word OK.", "Say OK.", llm.DEFAULT_MODEL["claude_cli"],
-                                       timeout=90)
         else:
-            raise HTTPException(400, "backend must be spark or claude_cli")
+            raise HTTPException(400, "backend must be spark")
     except HTTPException:
         raise
     except Exception as e:

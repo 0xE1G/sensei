@@ -6,8 +6,9 @@
 
 Backends (same prompts, same schemas, same validators, so switching is configuration only):
   rule        deterministic stand-ins written in code; used by tests and the smoke test
-  claude_cli  Claude through the Claude Code CLI (`claude -p`), for development while the Meta key is pending
-  spark       Muse Spark through the Meta API (OpenAI-compatible chat endpoint assumed; verify when the key arrives)
+  spark       Muse Spark through the Meta Model API (OpenAI-compatible /chat/completions)
+
+Every model call at run time goes to a Meta model; there is no other model backend.
 
 Every call is cached by hash of (job, prompt version, inputs, backend, model) in cache/llm/, and logged (without the
 output) to cache/llm/calls.jsonl. An invalid output gets the validator's errors fed back once; a second invalid
@@ -22,9 +23,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
-import subprocess
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -34,13 +32,12 @@ import jsonschema
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CACHE_DIR = ROOT / "cache" / "llm"
 PROMPT_DIR = pathlib.Path(__file__).resolve().parent / "prompts"
-BACKENDS = ("rule", "claude_cli", "spark")
+BACKENDS = ("rule", "spark")
 # Spark reasoning effort per job where it was measured (scripts/eval_models.py, 2026-11-02): low effort kept accuracy
 # and was 2-3x faster for task specs (20/20 vs 19/20) and plan programs (48/56 = 48/56); diagnosis keeps the model's own
 # level (first look 11/14 vs 8/14 at low). Jobs not listed: the model decides until measured.
 SPARK_EFFORT = {"task_spec": "low", "plan_program": "low"}
-DEFAULT_MODEL = {"rule": "rule-v1", "claude_cli": os.environ.get("KINTSUGI_CLAUDE_MODEL", "sonnet"),
-                 "spark": "muse-spark"}     # spark: META_MODEL / the model in the local settings wins (kintsugi.settings)
+DEFAULT_MODEL = {"rule": "rule-v1", "spark": "muse-spark"}     # spark: META_MODEL / the model in the local settings wins (kintsugi.settings)
 
 
 class ModelRejected(Exception):
@@ -86,12 +83,8 @@ class Result:
 
 class ModelClient:
     def __init__(self, backend: str | None = None, model: str | None = None, dry_run: bool | None = None,
-                 use_cache: bool = True, fallback: bool | None = None, effort=None, schema_output: bool | None = None):
+                 use_cache: bool = True, effort=None, schema_output: bool | None = None):
         """spark only:
-        fallback       a Spark call that fails (error, timeout, or an answer rejected twice) is re-sent to Claude; the
-                       result says so (backend claude_cli, requested_backend spark) and is cached under Claude's key, so
-                       it is never counted or reused as a Spark answer. None: the setting spark_fallback (default on);
-                       experiments that measure Spark pass False.
         effort         reasoning_effort per request (minimal / low / medium / high / xhigh): one value, or {job: value};
                        None = SPARK_EFFORT (measured per job; else the model decides). Part of the cache key.
         schema_output  ask the API to constrain the answer to the job's JSON schema (response_format json_schema).
@@ -103,12 +96,11 @@ class ModelClient:
         self.model = model or (settings.get("meta_model") if self.backend == "spark" else None) or DEFAULT_MODEL[self.backend]
         self.dry_run = bool(int(os.environ.get("KINTSUGI_LLM_DRYRUN", "0"))) if dry_run is None else dry_run
         self.use_cache = use_cache and os.environ.get("KINTSUGI_NO_CACHE", "0") != "1"   # repeats re-ask the model
-        self.fallback = (settings.get("spark_fallback", "1") != "0") if fallback is None else bool(fallback)
         if effort is None and os.environ.get("KINTSUGI_SPARK_EFFORT"):
             effort = os.environ["KINTSUGI_SPARK_EFFORT"]
         self.effort = effort
         self.schema_output = (os.environ.get("KINTSUGI_SPARK_SCHEMA", "0") == "1") if schema_output is None else schema_output
-        self.stats = {"calls": 0, "cached": 0, "would_call": 0, "repairs": 0, "rejected": 0, "fallbacks": 0}
+        self.stats = {"calls": 0, "cached": 0, "would_call": 0, "repairs": 0, "rejected": 0}
 
     def _effort(self, job_name):
         if self.backend != "spark":
@@ -119,7 +111,7 @@ class ModelClient:
 
     # ------------------------------------------------------------------ public
     def complete(self, job_name: str, inputs: dict, images=None) -> Result:
-        """images: local image files sent with the request (backends that read images: spark, claude_cli); the
+        """images: local image files sent with the request (spark reads them); the
         rule stand-in ignores them. Their content is part of the cache key."""
         job = _job(job_name)
         system, user = job.render(inputs)
@@ -153,19 +145,7 @@ class ModelClient:
             if not meta.get("dry_run"):
                 self._store(path, out, meta)
             return Result(out, meta)
-        try:
-            return self._complete_remote(job, system, user, inputs, images, meta, path, t0, effort, schema)
-        except Exception as e:
-            if not (self.backend == "spark" and self.fallback and shutil.which("claude")):
-                raise
-            # Safe fallback: the same request to Claude. Marked, and cached under Claude's own key.
-            self.stats["fallbacks"] += 1
-            reason = (f"{type(e).__name__}: {e}")[:300]
-            claude = ModelClient("claude_cli", use_cache=self.use_cache, fallback=False)
-            res = claude.complete(job.name, inputs, images=images)
-            meta2 = {**res.meta, "requested_backend": "spark", "fallback": reason}
-            self._log({**meta2, "note": "spark failed; answered by claude_cli"})
-            return Result(res.output, meta2)
+        return self._complete_remote(job, system, user, inputs, images, meta, path, t0, effort, schema)
 
     def _complete_remote(self, job, system, user, inputs, images, meta, path, t0, effort, schema):
         out, raw = None, None
@@ -215,8 +195,6 @@ class ModelClient:
             f.write(json.dumps({**meta, "time": time.strftime("%Y-%m-%d %H:%M:%S")}) + "\n")
 
     def _call(self, system: str, user: str, images=None, effort=None, schema=None) -> tuple[str, dict | None]:
-        if self.backend == "claude_cli":
-            return _call_claude_cli(system, user, self.model, images=images), None
         if self.backend == "spark":
             usage = {}
             return _call_openai_compatible(system, user, self.model, images=images, usage_out=usage, effort=effort,
@@ -240,43 +218,6 @@ def _parse_json(text: str):
     except (json.JSONDecodeError, ValueError):
         return None
     return v if isinstance(v, dict) else None
-
-
-def _call_claude_cli(system: str, user: str, model: str, timeout: float = 240, images=None) -> str:
-    """Claude Code in print mode, no session saved, run outside the repo so no project context leaks in. No tools,
-    except with images: then only Read, in a temporary folder that holds nothing but copies of those images."""
-    exe = shutil.which("claude")
-    if not exe:
-        raise RuntimeError("claude CLI not found on PATH (needed for KINTSUGI_LLM=claude_cli)")
-    # Drop variables inherited from a parent Claude Code session (desktop app, IDE): they point the CLI at that
-    # session's proxy instead of its own login.
-    env = {k: v for k, v in os.environ.items()
-           if not (k.startswith("CLAUDE") or k.startswith("ANTHROPIC_BASE_URL"))}
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-        tools = ""
-        if images:
-            names = []
-            for k, src in enumerate(images):
-                name = f"image_{k + 1}{pathlib.Path(src).suffix.lower() or '.jpg'}"
-                shutil.copy(src, pathlib.Path(tmp) / name)
-                names.append(name)
-            tools = "Read"
-            user = (f"{user}\n\nAttached images (read each with the Read tool before answering; they are files in the "
-                    f"current folder): {', '.join(names)}")
-        p = subprocess.run([exe, "-p", "--output-format", "json", "--tools", tools, "--no-session-persistence",
-                            "--model", model, "--system-prompt", system], input=user, cwd=tmp, capture_output=True,
-                           text=True, encoding="utf-8", timeout=timeout, env=env)
-    try:
-        res = json.loads(p.stdout)
-    except json.JSONDecodeError:
-        raise RuntimeError(f"claude CLI failed (exit {p.returncode}): {p.stderr.strip()[:500] or p.stdout[:500]}")
-    if res.get("is_error"):
-        msg = str(res.get("result"))
-        if "login" in msg.lower() or "api key" in msg.lower():
-            raise RuntimeError("the claude CLI is not logged in: open a terminal, run `claude`, type /login once, "
-                               f"then retry ({msg})")
-        raise RuntimeError(f"claude CLI error: {msg}")
-    return res.get("result", "")
 
 
 def _call_openai_compatible(system: str, user: str, model: str, timeout: float = 420, images=None,

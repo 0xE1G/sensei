@@ -1,7 +1,7 @@
 """Investigate failures: reproduce, diagnose (model job), test each cause with a one-change replay, write a ledger.
 
     python scripts/investigate.py --from-search runs/<id>_failsearch/report.json --library current
-    python scripts/investigate.py --from-search runs/<id>_failsearch/report.json --library seed --backend claude_cli
+    python scripts/investigate.py --from-search runs/<id>_failsearch/report.json --library seed --backend spark
     python scripts/investigate.py --from-search ... --per-cluster 3 --clusters cylinder/centre_grasp
 
 Cases are valid failures from a failure-search report, stratified by cluster and label. --library must be the

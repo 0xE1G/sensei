@@ -3,7 +3,7 @@
 For each failed trial (a task spec + seed):
   1. Replay the trial exactly (same task, seed and layout) to reproduce the failure and collect observable evidence:
      perception before/after, every skill's parameters and checks, finger width, arm contacts, routing.
-  2. Model job "diagnose" (rule stand-in, Claude or Spark) proposes up to three ranked causes, each with a predicted
+  2. Model job "diagnose" (rule stand-in or Muse Spark) proposes up to three ranked causes, each with a predicted
      failure label and ONE change that should make the step succeed if the cause is right.
   3. Each change is replayed on the very same scene (positions pinned): step succeeds -> CONFIRMED, else REJECTED.
   4. An evidence ledger labels every statement measured / hypothesis / confirmed / rejected.

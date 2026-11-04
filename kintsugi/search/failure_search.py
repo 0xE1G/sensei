@@ -6,7 +6,7 @@ Three strategies spend the same simulated-trial budget:
     random   uniform over templates, tested parameter ranges and reachable positions
     optuna   TPE maximizing valid failures (template is a categorical, parameters conditional on it)
     model    the model reads the results so far and proposes regions for the next batch (job "search_proposal";
-             rule stand-in, Claude or Spark through the model client)
+             rule stand-in or Muse Spark through the model client)
 
 A scenario is simulated only if it is plausible: parameters in range, position within reach, and the placer can lay
 the scene out. A failure counts only if the oracle solves the same scene ("valid failure"). Outputs, in

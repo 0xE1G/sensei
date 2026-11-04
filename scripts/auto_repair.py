@@ -1,6 +1,6 @@
 """Repair what ordinary runs got wrong: cluster failures, keep oracle-solvable ones, investigate, explore, gate.
 
-    python scripts/auto_repair.py runs/<id1> runs/<id2> --backend claude_cli
+    python scripts/auto_repair.py runs/<id1> runs/<id2> --backend spark
     python scripts/auto_repair.py runs/<id> --min-failures 5 --dry-run
 
 Writes runs/<time>_auto_repair/report.json (clusters, investigations, repair outcomes).

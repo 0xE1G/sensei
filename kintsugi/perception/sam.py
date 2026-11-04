@@ -1,6 +1,6 @@
 """SAM 3.1 (Meta) through the Meta Model API: used to find objects in a real photo (kintsugi/twin.py).
 
-Planned use in the simulation loop (CLAUDE.md, key decisions): SAM at key moments only; bulk experiments keep the
+Planned use in the simulation loop (project notes, key decisions): SAM at key moments only; bulk experiments keep the
 simulator's exact masks. Per-pixel masks are not decoded here: their compressed encoding is documented only through
 Meta's parser package (meta-sam-parser), which is not installed. The photo path uses SAM's boxes, which come as plain
 text; the raw mask tokens are kept in the result. So Perception(mode="sam") still refuses to start

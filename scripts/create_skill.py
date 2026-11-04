@@ -1,7 +1,7 @@
 """Create a skill the library does not have: model-written primitive -> search -> tune -> gates -> card.
 
     python scripts/create_skill.py push --task slide_plate                         # rule stand-in proposal
-    python scripts/create_skill.py push --task slide_plate --backend claude_cli    # Claude writes the primitive
+    python scripts/create_skill.py push --task slide_plate --backend spark    # Muse Spark writes the primitive
 
 Writes runs/<time>_create_<capability>/report.json (proposals, success map, tuning, gate) and, if the gates pass,
 skill_library/<name>.json with the code and lineage "model-written primitive".

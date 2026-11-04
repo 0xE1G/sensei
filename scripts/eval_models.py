@@ -1,6 +1,6 @@
 """Model evaluation suite: the same inputs to each backend arm, scored automatically.
 
-    python scripts/eval_models.py task_spec [--arms rule claude spark spark_low spark_low_schema]
+    python scripts/eval_models.py task_spec [--arms rule spark spark_low spark_low_schema]
     python scripts/eval_models.py programs  [--arms ...] [-n 8]
 
 task_spec  20 typed requests with the expected outcome (ok with the right goal structure, or refuse, or clarify);
@@ -9,9 +9,8 @@ task_spec  20 typed requests with the expected outcome (ok with the right goal s
 programs   tasks that need different abilities (ordering, stacking, relations, a push, standing up, opening and
            closing a drawer): the arm writes a plan program from the prompt, the program runs on n fresh scenes
            (seeds 700+, never used by any gate), next to the fixed plan on the same scenes.
-Arms: rule (stand-ins), claude (claude CLI), spark (Muse Spark, model-chosen reasoning effort), spark_low (reasoning
-effort low), spark_low_schema (+ answers constrained to the job schema). Spark arms run WITHOUT the Claude fallback, so
-every Spark number is Spark's own. Report: runs/<id>_eval_<suite>/report.json (latency, tokens, repairs per call).
+Arms: rule (stand-ins), spark (Muse Spark, model-chosen reasoning effort), spark_low (reasoning
+effort low), spark_low_schema (+ answers constrained to the job schema). Report: runs/<id>_eval_<suite>/report.json (latency, tokens, repairs per call).
 """
 import argparse
 import json
@@ -24,11 +23,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from kintsugi.agents.llm import ModelClient, ModelRejected  # noqa: E402
 from kintsugi.runner import ROOT  # noqa: E402
 
-ARMS = {"rule": dict(backend="rule"), "claude": dict(backend="claude_cli"),
-        "wonder": dict(backend="spark", model="muse-wonder-1.0", fallback=False),
-        "spark": dict(backend="spark", fallback=False),
-        "spark_low": dict(backend="spark", fallback=False, effort="low"),
-        "spark_low_schema": dict(backend="spark", fallback=False, effort="low", schema_output=True)}
+ARMS = {"rule": dict(backend="rule"),
+        "wonder": dict(backend="spark", model="muse-wonder-1.0"),
+        "spark": dict(backend="spark"),
+        "spark_low": dict(backend="spark", effort="low"),
+        "spark_low_schema": dict(backend="spark", effort="low", schema_output=True)}
 
 
 def _goals(spec):
@@ -230,7 +229,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("suite", choices=["task_spec", "programs", "skills"])
     ap.add_argument("--kinds", nargs="*", default=list(SKILL_CASES))
-    ap.add_argument("--arms", nargs="*", default=["rule", "claude", "spark", "spark_low", "spark_low_schema"])
+    ap.add_argument("--arms", nargs="*", default=["rule", "spark", "spark_low", "spark_low_schema"])
     ap.add_argument("-n", type=int, default=8)
     a = ap.parse_args()
     out = ROOT / "runs" / (time.strftime("%Y%m%d-%H%M%S") + f"_eval_{a.suite}")

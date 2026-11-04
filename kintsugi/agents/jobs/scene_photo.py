@@ -44,7 +44,7 @@ def validate(out, inputs) -> list[str]:
 
 def rule(inputs) -> dict:
     """The rule backend cannot see images."""
-    return {"status": "clarify", "question": "Reading a photo needs a vision model: choose Muse Spark (or Claude) "
+    return {"status": "clarify", "question": "Reading a photo needs a vision model: choose Muse Spark "
                                              "as the model, or type the task instead."}
 
 

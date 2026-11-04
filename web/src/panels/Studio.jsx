@@ -24,8 +24,8 @@ const OUTCOMES = {
 };
 const COLORS = { red: "#d0453b", green: "#3f9d4f", blue: "#3b6fd0", yellow: "#e2b93b", orange: "#e5813a",
   purple: "#8a5cc7", white: "#eeeeee", black: "#333", grey: "#999", gray: "#999", brown: "#8a5a3c", pink: "#e58fb5" };
-const BACKEND_NAMES = { rule: "rule stand-in (offline)", claude_cli: "Claude (development stand-in)", spark: "Muse Spark" };
-const BACKEND_SHORT = { rule: "Rules (offline)", claude_cli: "Claude", spark: "Muse Spark" };
+const BACKEND_NAMES = { rule: "rule stand-in (offline)", spark: "Muse Spark" };
+const BACKEND_SHORT = { rule: "Rules (offline)", spark: "Muse Spark" };
 // [stage key, short label, title, how it works (hover)]
 const STAGES = [
   ["check", "Check", "Check the failures are real", "an expert with full knowledge replays each failed scene"],
