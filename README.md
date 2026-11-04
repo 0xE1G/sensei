@@ -23,14 +23,19 @@ object it was not trained on, it fails without saying why. The fix is more data.
 Kintsugi takes a different route:
 
 - **Meta's models reason.** Muse Spark turns a request into a task and a plan, diagnoses every failure from what the
-  cameras and the gripper measured, and writes the code of skills the robot does not have yet. SAM 3.1 and Muse Image
-  rebuild a real table, from one photo, as a digital twin.
+  cameras and the gripper measured, and writes the code of skills the robot does not have yet.
+- **Failures explain themselves.** Each cause Muse Spark proposes is a hypothesis until a replay of the exact scene,
+  with one change, confirms or rejects it. You see why a step failed, not only that it did.
 - **Physics practises.** Every idea is tried in MuJoCo, hundreds of times in parallel on the CPU, under randomized
   friction and mass, and tuned by Bayesian search.
 - **Statistics decide.** A change is kept only if it fixes the failure, holds on scenes and objects the search never
   saw, and breaks nothing that worked before.
 - **Skills are geometry, not names.** A skill is defined on the shapes the cameras measure (a rim, a top face, a long
   axis), so a skill found on a bowl picks up a mug it has never seen.
+- **Your own table, from one photo.** SAM 3.1 and Muse Image rebuild a real table as a digital twin, and the robot
+  works on that copy.
+- **Cheap, and no GPU.** Nothing is trained. A laptop CPU runs the simulation, and a new skill costs minutes of
+  compute and about a cent of model calls.
 
 ## See it work
 
@@ -58,10 +63,6 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 
 ## How it works
 
-<p align="center"><img src="docs/media/fail_to_pass.gif" alt="Four robots fail with the seed skills (missed grasp, collisions); the same scenes succeed with the skills Kintsugi built and verified" width="100%"></p>
-
-<p align="center"><sub>The same four scenes: first with the seed skills, then with the skills Kintsugi built and verified.</sub></p>
-
 <p align="center"><img src="docs/media/loop.png" alt="The loop: it fails, it investigates, it practises, it verifies, it keeps the skill" width="100%"></p>
 
 1. **It fails.** The simulator catches and labels every failed step: missed grasp, collision, drop, tipped over, wrong
@@ -77,11 +78,17 @@ every scene succeeds (15 minutes of real time, shown as a time-lapse).
 5. **It keeps the skill.** The skill becomes a versioned card with its parameters, preconditions, evidence and full
    lineage. The router then picks, for each object shape, the skill with the best measured success.
 
+### Before and after
+
+<p align="center"><img src="docs/media/fail_to_pass.gif" alt="Four robots fail with the seed skills (missed grasp, collisions); the same scenes succeed with the skills Kintsugi built and verified" width="100%"></p>
+
+<p align="center"><sub>The same four scenes: first with the seed skills, then with the skills Kintsugi built and verified.</sub></p>
+
 ### Skills transfer zero-shot
 
 <p align="center"><b>One skill, found on a bowl, used zero-shot on objects it never saw.</b></p>
 
-<p align="center"><img src="docs/media/zero_shot.gif" alt="A skill found on a bowl is used zero-shot on an unseen mug and on scanned household objects" width="560"></p>
+<p align="center"><img src="docs/media/zero_shot.gif" alt="A skill found on a bowl is used zero-shot on an unseen mug and on scanned household objects" width="100%"></p>
 
 A skill is defined on shapes, not object names, so the rim grasp found on one bowl picks up an unseen mug and real 3D
 scans of household objects ([Google Scanned Objects](https://research.google/blog/scanned-objects-by-google-research-a-dataset-of-3d-scanned-common-household-items/))
