@@ -529,9 +529,11 @@ export default function Studio({ open, settingsVersion = 0, openSettings }) {
   // Settings changed (a key added, a default picked): re-read which backends and masks are available.
   useEffect(() => {
     if (!settingsVersion) return;
+    const prevDefault = info?.default_backend;
     studio.info().then((i) => {
       setInfo(i);
-      setBackend((b) => (i.backends.includes(b) ? b : i.default_backend));
+      // follow the default when it changes (a key was just added -> Muse Spark), unless the user picked another model
+      setBackend((b) => (!i.backends.includes(b) || b === prevDefault ? i.default_backend : b));
       setSettings((s) => ({ ...s, masks: i.masks?.[s.masks]?.available ? s.masks : "sim" }));
     }).catch(() => {});
   }, [settingsVersion]);
